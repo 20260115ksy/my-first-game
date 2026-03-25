@@ -1,0 +1,200 @@
+import pygame
+import sys
+import math
+
+# =====================
+# 설정
+# =====================
+WIDTH, HEIGHT = 800, 600
+FPS = 60
+
+# 색상
+BLACK = (0, 0, 0)
+GRAY = (150, 150, 150)
+RED = (255, 0, 0)       # AABB
+GREEN = (0, 255, 0)     # OBB
+BLUE = (0, 150, 255)    # Circle
+
+# =====================
+# 초기화
+# =====================
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Collision System")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 30)
+
+# =====================
+# 객체 생성
+# =====================
+player = pygame.Rect(100, 100, 100, 100)
+player_speed = 4.5
+
+center_rect = pygame.Rect(
+    WIDTH // 2 - 75,
+    HEIGHT // 2 - 75,
+    150,
+    150
+)
+
+rotation_angle = 0
+rotation_speed = 1
+boost_speed = 3
+
+# =====================
+# 입력
+# =====================
+def handle_input(rect):
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]: rect.x -= player_speed
+    if keys[pygame.K_RIGHT]: rect.x += player_speed
+    if keys[pygame.K_UP]: rect.y -= player_speed
+    if keys[pygame.K_DOWN]: rect.y += player_speed
+
+
+def update_rotation():
+    global rotation_angle
+    keys = pygame.key.get_pressed()
+    speed = rotation_speed + boost_speed if keys[pygame.K_z] else rotation_speed
+    rotation_angle = (rotation_angle + speed) % 360
+
+# =====================
+# Circle
+# =====================
+def get_circle_data(rect):
+    x, y = rect.center
+    r = rect.width // 2
+    return x, y, r
+
+
+def draw_circle_bb(rect):
+    x, y, r = get_circle_data(rect)
+    pygame.draw.circle(screen, BLUE, (x, y), 4)
+    pygame.draw.circle(screen, BLUE, (x, y), r, 2)
+
+
+def check_circle_collision(r1, r2):
+    x1, y1, r1 = get_circle_data(r1)
+    x2, y2, r2 = get_circle_data(r2)
+    distance = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+    return distance <= (r1 + r2)
+
+# =====================
+# AABB
+# =====================
+def check_aabb_collision(r1, r2):
+    return r1.colliderect(r2)
+
+# =====================
+# OBB + SAT
+# =====================
+def get_rotated_rect_points(rect, angle):
+    cx, cy = rect.center
+    w, h = rect.width / 2, rect.height / 2
+
+    points = [(-w, -h), (w, -h), (w, h), (-w, h)]
+    rad = math.radians(angle)
+
+    return [
+        (cx + x * math.cos(rad) - y * math.sin(rad),
+         cy + x * math.sin(rad) + y * math.cos(rad))
+        for x, y in points
+    ]
+
+
+def dot(v1, v2):
+    return v1[0]*v2[0] + v1[1]*v2[1]
+
+
+def normalize(v):
+    length = math.sqrt(v[0]**2 + v[1]**2)
+    return (v[0]/length, v[1]/length)
+
+
+def get_axes(points):
+    axes = []
+    for i in range(len(points)):
+        p1 = points[i]
+        p2 = points[(i + 1) % len(points)]
+        edge = (p2[0] - p1[0], p2[1] - p1[1])
+        normal = (-edge[1], edge[0])
+        axes.append(normalize(normal))
+    return axes
+
+
+def project(points, axis):
+    projections = [dot(p, axis) for p in points]
+    return min(projections), max(projections)
+
+
+def check_obb_collision(p1, p2):
+    axes = get_axes(p1) + get_axes(p2)
+    for axis in axes:
+        min1, max1 = project(p1, axis)
+        min2, max2 = project(p2, axis)
+        if max1 < min2 or max2 < min1:
+            return False
+    return True
+
+# =====================
+# UI
+# =====================
+def draw_text(text, x, y, color):
+    img = font.render(text, True, color)
+    screen.blit(img, (x, y))
+
+# =====================
+# 렌더링
+# =====================
+def draw(player_pts, center_pts, aabb, circle, obb):
+    screen.fill(BLACK)
+
+    # 오브젝트
+    pygame.draw.rect(screen, GRAY, player)
+    pygame.draw.polygon(screen, GRAY, center_pts)
+
+    # Bounding Boxes
+    pygame.draw.rect(screen, RED, player, 2)
+    pygame.draw.rect(screen, RED, center_rect, 2)
+    pygame.draw.polygon(screen, GREEN, center_pts, 2)
+    draw_circle_bb(player)
+    draw_circle_bb(center_rect)
+
+    # 텍스트 UI
+    draw_text(f"Circle: {'HIT' if circle else 'NO'}", 10, 10, BLUE)
+    draw_text(f"AABB:   {'HIT' if aabb else 'NO'}", 10, 35, RED)
+    draw_text(f"OBB:    {'HIT' if obb else 'NO'}", 10, 60, GREEN)
+
+    pygame.display.flip()
+
+# =====================
+# 메인 루프
+# =====================
+def main():
+    running = True
+
+    while running:
+        clock.tick(FPS)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        handle_input(player)
+        update_rotation()
+
+        player_pts = get_rotated_rect_points(player, 0)
+        center_pts = get_rotated_rect_points(center_rect, rotation_angle)
+
+        # 충돌 검사
+        aabb = check_aabb_collision(player, center_rect)
+        circle = check_circle_collision(player, center_rect)
+        obb = check_obb_collision(player_pts, center_pts)
+
+        draw(player_pts, center_pts, aabb, circle, obb)
+
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
