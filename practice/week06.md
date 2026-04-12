@@ -1,7 +1,7 @@
 # 6주차 실습 기록
 
 ## 사용한 에셋
-- 이미지:
+- 이미지: PIXEL SPACESHIPS 출처: OPENGAMEART.ORG - pawles22
 - 사운드:
 
 ## 사용한 AI 프롬포트
