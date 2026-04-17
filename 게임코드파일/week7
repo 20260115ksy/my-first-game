@@ -3,9 +3,17 @@ import random
 import sys
 import math
 import colorsys
+import base64
+import io
 
 # --- 1. 초기화 ---
+pygame.mixer.pre_init(44100, -16, 2, 1024)
+
 pygame.init()
+pygame.mixer.init() # 🛠️ 사운드 믹서 초기화 추가
+
+
+pygame.mixer.set_num_channels(32)
 
 def get_korean_font(size):
     candidates = ["malgungothic", "applegothic", "nanumgothic", "notosanscjk"]
@@ -15,7 +23,8 @@ def get_korean_font(size):
             return font
     return pygame.font.SysFont(None, size)
 
-WIDTH, HEIGHT = 800, 600
+# 🛠️ 화면 크기를 시원하게 1600x900으로 키웠습니다.
+WIDTH, HEIGHT = 1600, 900
 FPS = 60
 WHITE, GRAY, BLACK, RED, YELLOW, BLUE, ORANGE, GREEN, PURPLE, CYAN = (
     (255, 255, 255), (20, 20, 40), (0, 0, 0), (220, 50, 50),
@@ -24,212 +33,242 @@ WHITE, GRAY, BLACK, RED, YELLOW, BLUE, ORANGE, GREEN, PURPLE, CYAN = (
 )
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Space Shooter: Legendary Bosses")
+pygame.display.set_caption("Space Shooter: Legendary Bosses (Large Ver.)")
 clock = pygame.time.Clock()
 
-font_small = get_korean_font(20)
-font_mid = get_korean_font(40)
-font_big = get_korean_font(80)
-font_warning = get_korean_font(100)
-font_count = get_korean_font(150)
+# ── 사운드 로드 및 설정 (안전하게 예외 처리 포함) ──
+try:
+    shoot_sound = pygame.mixer.Sound("laser.mp3")
+    shoot_sound.set_volume(0.05)
+except Exception as e:
+    print(f"효과음 로드 실패: {e}")
+    shoot_sound = None
+    
+try:
+    warning_sound = pygame.mixer.Sound("warning.mp3")
+    warning_sound.set_volume(0.4)
+except Exception as e:
+    print(f"경고음 로드 실패: {e}")
+    warning_sound = None
+    
+try:
+    explosion_sound = pygame.mixer.Sound("explosion.mp3")
+    explosion_sound.set_volume(0.5)
+except Exception as e:
+    print(f"폭발음 로드 실패: {e}")
+    explosion_sound = None
+
+try:
+    pygame.mixer.music.load("normal.mp3")
+    pygame.mixer.music.set_volume(0.3)
+    pygame.mixer.music.play(-1) # 무한 반복
+except Exception as e:
+    print(f"배경음악 로드 실패: {e}")
+
+# 🛠️ 폰트 크기도 전체적으로 크게 키웠습니다.
+font_small = get_korean_font(30)
+font_mid = get_korean_font(55)
+font_big = get_korean_font(110)
+font_warning = get_korean_font(140)
+font_count = get_korean_font(200)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  스프라이트 시트 Base64 데이터 및 설정
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SHEET_B64 = "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"
+FRAME_W, FRAME_H = 32, 32
+COLS = 5
+FRAME_DELAY = 150  # ms
+# 🛠️ 플레이어 크기 확대 (70 -> 100)
+PLAYER_SIZE = 100   
+
+player_frames = []
+try:
+    sheet_bytes = base64.b64decode(SHEET_B64)
+    player_sheet = pygame.image.load(io.BytesIO(sheet_bytes)).convert_alpha()
+    for i in range(35):
+        row, col = divmod(i, COLS)
+        rect = pygame.Rect(col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H)
+        img = pygame.transform.scale(player_sheet.subsurface(rect), (PLAYER_SIZE, PLAYER_SIZE))
+        player_frames.append(img)
+    walk_frames = [player_frames[i] for i in [34, 22, 11, 0]]
+except Exception as e:
+    dummy = pygame.Surface((PLAYER_SIZE, PLAYER_SIZE), pygame.SRCALPHA)
+    dummy.fill(BLUE)
+    walk_frames = [dummy]
 
 LEVELS = [
+    # 🛠️ 커진 화면에 맞게 이동 속도(speed) 소폭 상향
     {
-        "speed": 5,
-        "spawn": 45,
-        "hard_spawn": 28,
-        "hard_spawn_count": 2,
-        "label": "Lv.1",
-        "boss_hp": 30,
-        "need_score": 300,
-        "boss_color": RED,
-        "enemy_color": RED
+        "speed": 6.5, "spawn": 45, "hard_spawn": 28, "hard_spawn_count": 2,
+        "label": "Lv.1", "boss_hp": 30, "need_score": 300,
+        "boss_color": RED, "enemy_color": RED
     },
     {
-        "speed": 3,
-        "spawn": 55,
-        "hard_spawn": 32,
-        "hard_spawn_count": 2,
-        "label": "Lv.2",
-        "boss_hp": 60,
-        "need_score": 400,
-        "boss_color": YELLOW,
-        "enemy_color": YELLOW
+        "speed": 4.5, "spawn": 55, "hard_spawn": 32, "hard_spawn_count": 2,
+        "label": "Lv.2", "boss_hp": 60, "need_score": 400,
+        "boss_color": YELLOW, "enemy_color": YELLOW
     },
     {
-        "speed": 5.5,
-        "spawn": 30,
-        "hard_spawn": 18,
-        "hard_spawn_count": 3,
-        "label": "FINAL STAGE",
-        "boss_hp": 120,
-        "need_score": 500,
-        "boss_color": BLACK,
-        "enemy_color": PURPLE
+        "speed": 7.5, "spawn": 30, "hard_spawn": 18, "hard_spawn_count": 3,
+        "label": "FINAL STAGE", "boss_hp": 120, "need_score": 500,
+        "boss_color": BLACK, "enemy_color": PURPLE
     },
 ]
 
 BOSS_NAMES = ["COMMANDER RED", "TANKER YELLOW", "VOID PURPLE"]
-
-# ─────────────────────────────────────────────
-#  하드모드 페이즈 트리거 HP 비율
-#  보스 0: 30% 이하  →  phase_triggered[0] = True
-#  보스 1: 40% 이하  →  phase_triggered[1] = True
-#  보스 2: 50% 이하  →  phase_triggered[2] = True
-# ─────────────────────────────────────────────
 PHASE_HP_RATIO = [0.30, 0.40, 0.50]
 
 
 def fire_phase_attack(boss, lv, player, enemy_bullets):
-    """
-    하드모드 전용 페이즈 공격 패턴.
-    lv 0 – Commander Red  : 좌·우 포구에서 각각 3방향 탄막
-    lv 1 – Tanker Yellow  : 보스 중심에서 8방향 확산탄
-    lv 2 – Void Purple    : 플레이어를 향한 추적탄 3발 연사
-    """
     bx, by = boss['rect'].centerx, boss['rect'].bottom
 
     if lv == 0:
-        # 좌우 포구 각각 3방향
-        for px in [boss['rect'].left + 10, boss['rect'].right - 10]:
-            for vx in [-3, 0, 3]:
+        for px in [boss['rect'].left + 15, boss['rect'].right - 15]:
+            for vx in [-4, 0, 4]:
                 enemy_bullets.append({
-                    "rect": pygame.Rect(px - 4, by, 8, 16),
-                    "vx": vx, "vy": 7,
-                    "type": "bullet", "color": (255, 80, 0)
+                    "rect": pygame.Rect(px - 6, by, 12, 24),
+                    "vx": vx, "vy": 10, "type": "bullet", "color": (255, 80, 0)
                 })
-
     elif lv == 1:
-        # 8방향 확산탄
         for angle_deg in range(0, 360, 45):
             rad = math.radians(angle_deg)
-            speed = 5
+            speed = 7
             enemy_bullets.append({
-                "rect": pygame.Rect(bx - 5, boss['rect'].centery - 5, 10, 10),
-                "vx": math.cos(rad) * speed,
-                "vy": math.sin(rad) * speed,
+                "rect": pygame.Rect(bx - 7, boss['rect'].centery - 7, 15, 15),
+                "vx": math.cos(rad) * speed, "vy": math.sin(rad) * speed,
                 "type": "bullet", "color": (255, 220, 50)
             })
-
     elif lv == 2:
-        # 플레이어 방향으로 추적탄 3발 (약간 퍼짐)
         dx = player.centerx - bx
         dy = player.centery - by
         dist = math.hypot(dx, dy) or 1
         base_angle = math.atan2(dy, dx)
         for spread in [-0.25, 0, 0.25]:
             a = base_angle + spread
-            speed = 9
+            speed = 12
             enemy_bullets.append({
-                "rect": pygame.Rect(bx - 5, by, 10, 10),
-                "vx": math.cos(a) * speed,
-                "vy": math.sin(a) * speed,
+                "rect": pygame.Rect(bx - 7, by, 15, 15),
+                "vx": math.cos(a) * speed, "vy": math.sin(a) * speed,
                 "type": "bullet", "color": (200, 0, 255)
             })
 
 
-# --- 멋진 보스 그리기 함수 ---
 def draw_detailed_boss(surface, boss, lv, ox, oy, player_pos):
     bx, by = boss['rect'].x + ox, boss['rect'].y + oy
     bw, bh = boss['rect'].width, boss['rect'].height
     tick = pygame.time.get_ticks()
-
-    # 페이즈 진입 시 보스 테두리를 붉게 강조
     phase_active = boss.get('phase_triggered', False)
 
-    if lv == 0:  # Lv.1 Commander Red
+    # 🛠️ 보스 디테일 그림들도 커진 보스 크기(180x150)에 맞게 비율 조정
+    if lv == 0:
         pygame.draw.rect(surface, RED, (bx, by, bw, bh))
         border_col = (255, 255, 0) if phase_active else (100, 0, 0)
-        pygame.draw.rect(surface, border_col, (bx, by, bw, bh), 3)
-        pygame.draw.line(surface, YELLOW, (bx + bw // 2 - 15, by + 30), (bx + bw // 2 + 15, by + 30), 4)
-        pygame.draw.line(surface, YELLOW, (bx + bw // 2 - 10, by + 40), (bx + bw // 2 + 10, by + 40), 4)
-        pygame.draw.circle(surface, GREEN, (bx + 25, by + 45), 8)
-        pygame.draw.circle(surface, BLUE, (bx + bw - 25, by + 45), 8)
-        pygame.draw.rect(surface, BLACK, (bx + bw // 2 - 10, by + 5, 20, 15))
+        pygame.draw.rect(surface, border_col, (bx, by, bw, bh), 4)
+        pygame.draw.line(surface, YELLOW, (bx + bw // 2 - 22, by + 45), (bx + bw // 2 + 22, by + 45), 6)
+        pygame.draw.line(surface, YELLOW, (bx + bw // 2 - 15, by + 60), (bx + bw // 2 + 15, by + 60), 6)
+        pygame.draw.circle(surface, GREEN, (bx + 37, by + 67), 12)
+        pygame.draw.circle(surface, BLUE, (bx + bw - 37, by + 67), 12)
+        pygame.draw.rect(surface, BLACK, (bx + bw // 2 - 15, by + 7, 30, 22))
         flame_c = ORANGE if tick % 200 < 100 else RED
-        pygame.draw.polygon(surface, flame_c, [(bx + 10, by), (bx - 10, by - 15), (bx + 20, by)])
-        pygame.draw.polygon(surface, flame_c, [(bx + bw - 10, by), (bx + bw + 10, by - 15), (bx + bw - 20, by)])
+        pygame.draw.polygon(surface, flame_c, [(bx + 15, by), (bx - 15, by - 22), (bx + 30, by)])
+        pygame.draw.polygon(surface, flame_c, [(bx + bw - 15, by), (bx + bw + 15, by - 22), (bx + bw - 30, by)])
 
-    elif lv == 1:  # Lv.2 Tanker Yellow
-        pygame.draw.rect(surface, (200, 180, 0), (bx, by, bw, bh), border_radius=10)
+    elif lv == 1:
+        pygame.draw.rect(surface, (200, 180, 0), (bx, by, bw, bh), border_radius=15)
         border_col = (255, 80, 0) if phase_active else BLACK
-        pygame.draw.rect(surface, border_col, (bx, by, bw, bh), 3, border_radius=10)
+        pygame.draw.rect(surface, border_col, (bx, by, bw, bh), 4, border_radius=15)
         for i in range(3):
-            pygame.draw.line(surface, BLACK, (bx + i * 30 + 15, by + 10), (bx + i * 30 + 15, by + bh - 10), 2)
+            pygame.draw.line(surface, BLACK, (bx + i * 45 + 45, by + 15), (bx + i * 45 + 45, by + bh - 15), 3)
         core_c = CYAN if (boss['rect'].x % 10 < 5) else WHITE
-        pygame.draw.circle(surface, core_c, (bx + bw // 2, by + bh // 2), 25)
-        pygame.draw.circle(surface, BLACK, (bx + bw // 2, by + bh // 2), 25, 4)
-        pygame.draw.rect(surface, GRAY, (bx + 10, by + bh - 5, 20, 20))
-        pygame.draw.rect(surface, GRAY, (bx + bw - 30, by + bh - 5, 20, 20))
+        pygame.draw.circle(surface, core_c, (bx + bw // 2, by + bh // 2), 37)
+        pygame.draw.circle(surface, BLACK, (bx + bw // 2, by + bh // 2), 37, 6)
+        pygame.draw.rect(surface, GRAY, (bx + 15, by + bh - 7, 30, 30))
+        pygame.draw.rect(surface, GRAY, (bx + bw - 45, by + bh - 7, 30, 30))
 
-    elif lv == 2:  # FINAL Stage: Void Purple
+    elif lv == 2:
         pts = [
-            (bx + bw // 2, by), (bx + 10, by + 30), (bx, by + bh // 2),
-            (bx + bw // 2, by + bh), (bx + bw, by + bh // 2), (bx + bw - 10, by + 30)
+            (bx + bw // 2, by), (bx + 15, by + 45), (bx, by + bh // 2),
+            (bx + bw // 2, by + bh), (bx + bw, by + bh // 2), (bx + bw - 15, by + 45)
         ]
         pygame.draw.polygon(surface, (30, 30, 50), pts)
         border_col = (255, 50, 255) if phase_active else PURPLE
-        pygame.draw.polygon(surface, border_col, pts, 3)
+        pygame.draw.polygon(surface, border_col, pts, 4)
 
         eye_center = (bx + bw // 2, by + bh // 2)
-        pygame.draw.circle(surface, WHITE, eye_center, 20)
-        pygame.draw.circle(surface, BLACK, eye_center, 20, 2)
+        pygame.draw.circle(surface, WHITE, eye_center, 30)
+        pygame.draw.circle(surface, BLACK, eye_center, 30, 3)
 
         dx = player_pos[0] - eye_center[0]
         dy = player_pos[1] - eye_center[1]
         dist = math.hypot(dx, dy) or 1
-        px, py = eye_center[0] + (dx / dist) * 8, eye_center[1] + (dy / dist) * 8
+        px, py = eye_center[0] + (dx / dist) * 12, eye_center[1] + (dy / dist) * 12
         eye_col = (255, 0, 200) if phase_active else (100, 0, 100)
-        pygame.draw.circle(surface, eye_col, (int(px), int(py)), 10)
-        pygame.draw.circle(surface, (0, 0, 0), (int(px), int(py)), 5)
-
-        pygame.draw.circle(surface, border_col, eye_center, 40 + (tick % 500) // 20, 1)
+        pygame.draw.circle(surface, eye_col, (int(px), int(py)), 15)
+        pygame.draw.circle(surface, (0, 0, 0), (int(px), int(py)), 7)
+        pygame.draw.circle(surface, border_col, eye_center, 60 + (tick % 500) // 15, 2)
 
 
 def draw_item_shape(surface, x, y, item_type):
+    # 🛠️ 아이템 크기 확대 (30x30 기준)
     if item_type == "heal":
-        pygame.draw.rect(surface, GREEN, (x + 8, y, 4, 20))
-        pygame.draw.rect(surface, GREEN, (x, y + 8, 20, 4))
+        pygame.draw.rect(surface, GREEN, (x + 12, y, 6, 30))
+        pygame.draw.rect(surface, GREEN, (x, y + 12, 30, 6))
     elif item_type == "shield":
-        pts = [(x + 10, y), (x + 20, y + 7), (x + 17, y + 20), (x + 3, y + 20), (x, y + 7)]
+        pts = [(x + 15, y), (x + 30, y + 10), (x + 25, y + 30), (x + 5, y + 30), (x, y + 10)]
         pygame.draw.polygon(surface, CYAN, pts)
-        pygame.draw.polygon(surface, WHITE, pts, 1)
+        pygame.draw.polygon(surface, WHITE, pts, 2)
     elif item_type == "power":
-        pygame.draw.circle(surface, YELLOW, (x + 10, y + 10), 10)
+        pygame.draw.circle(surface, YELLOW, (x + 15, y + 15), 15)
         p_txt = font_small.render("P", True, (0, 0, 0))
-        surface.blit(p_txt, (x + 5, y - 2))
+        surface.blit(p_txt, (x + 7, y - 3))
 
 
-def show_ending_countdown(main_text, sub_text, color):
-    e_stars = [[random.randint(0, WIDTH), random.randint(0, HEIGHT), random.randint(1, 3)] for _ in range(50)]
-    for i in range(3, 0, -1):
-        for _ in range(60):
-            screen.fill(GRAY)
-            for s in e_stars:
-                s[1] = (s[1] + s[2]) % HEIGHT
-                pygame.draw.circle(screen, WHITE, (s[0], s[1]), s[2])
+# 🛠️ [수정됨] Enter 키를 눌러야 넘어가는 수동 엔딩 화면 함수
+def show_ending_screen(main_text, sub_text, color):
+    e_stars = [[random.randint(0, WIDTH), random.randint(0, HEIGHT), random.randint(1, 3)] for _ in range(70)]
+    waiting = True
 
-            m_surf = font_big.render(main_text, True, color)
-            screen.blit(m_surf, (WIDTH // 2 - m_surf.get_width() // 2, HEIGHT // 2 - 100))
+    while waiting:
+        screen.fill(GRAY)
+        for s in e_stars:
+            s[1] = (s[1] + s[2]) % HEIGHT
+            pygame.draw.circle(screen, WHITE, (s[0], s[1]), s[2])
 
-            s_surf = font_mid.render(sub_text, True, WHITE)
-            screen.blit(s_surf, (WIDTH // 2 - s_surf.get_width() // 2, HEIGHT // 2))
+        m_surf = font_big.render(main_text, True, color)
+        screen.blit(m_surf, (WIDTH // 2 - m_surf.get_width() // 2, HEIGHT // 2 - 120))
 
-            c_surf = font_mid.render(f"Back to Lobby in {i}...", True, YELLOW)
-            screen.blit(c_surf, (WIDTH // 2 - c_surf.get_width() // 2, HEIGHT // 2 + 100))
+        s_surf = font_mid.render(sub_text, True, WHITE)
+        screen.blit(s_surf, (WIDTH // 2 - s_surf.get_width() // 2, HEIGHT // 2 + 20))
 
-            pygame.display.flip()
-            clock.tick(FPS)
+        # 0.5초마다 깜빡이는 Enter 안내 문구
+        if (pygame.time.get_ticks() // 500) % 2 == 0:
+            c_surf = font_mid.render("Press ENTER to Return to Lobby", True, YELLOW)
+            screen.blit(c_surf, (WIDTH // 2 - c_surf.get_width() // 2, HEIGHT // 2 + 150))
 
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+        pygame.display.flip()
+        clock.tick(FPS)
+
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if e.type == pygame.KEYDOWN:
+                if e.key in [pygame.K_RETURN, pygame.K_KP_ENTER]:
+                    waiting = False
 
 
 def main():
     while True:
-        stars = [[random.randint(0, WIDTH), random.randint(0, HEIGHT), random.randint(1, 3)] for _ in range(70)]
+        pygame.mixer.music.stop()
+        try:
+            pygame.mixer.music.load("normal.mp3")
+            pygame.mixer.music.set_volume(0.3)
+            pygame.mixer.music.play(-1)
+        except Exception as e:
+            print(f"로비 배경음악 재생 실패: {e}")
+            
+        stars = [[random.randint(0, WIDTH), random.randint(0, HEIGHT), random.randint(1, 3)] for _ in range(100)]
         selected, menu = 0, True
 
         while menu:
@@ -239,21 +278,21 @@ def main():
                 pygame.draw.circle(screen, WHITE, (s[0], s[1]), s[2])
 
             t = font_big.render("SPACE SHOOTER", True, YELLOW)
-            screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 100))
+            screen.blit(t, (WIDTH // 2 - t.get_width() // 2, 150))
 
             for i, opt in enumerate(["NORMAL MODE", "HARDCORE MODE"]):
                 c = WHITE if i == selected else (80, 80, 80)
                 if i == selected and i == 1:
                     c = RED
                 txt = font_mid.render(("> " if i == selected else "  ") + opt, True, c)
-                screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, 280 + i * 70))
+                screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, 380 + i * 90))
 
             desc_str = "4 Lives / Normal Speed" if selected == 0 else "3 Lives / Fast Speed & High Difficulty"
             desc_surf = font_small.render(desc_str, True, GREEN if selected == 0 else ORANGE)
-            screen.blit(desc_surf, (WIDTH // 2 - desc_surf.get_width() // 2, 420))
+            screen.blit(desc_surf, (WIDTH // 2 - desc_surf.get_width() // 2, 580))
 
-            guide = font_small.render("Move: Arrow Keys  |  Fire: Space Bar", True, (180, 180, 180))
-            screen.blit(guide, (WIDTH // 2 - guide.get_width() // 2, 480))
+            guide = font_small.render("Move: Arrow Keys  |  Fire: Space Bar  |  Exit: ESC", True, (180, 180, 180))
+            screen.blit(guide, (WIDTH // 2 - guide.get_width() // 2, 650))
 
             pygame.display.flip()
 
@@ -262,16 +301,34 @@ def main():
                     pygame.quit()
                     sys.exit()
                 if e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_ESCAPE:
+                        pygame.quit()
+                        sys.exit()
                     if e.key == pygame.K_UP:
                         selected = 0
                     if e.key == pygame.K_DOWN:
                         selected = 1
                     if e.key in [pygame.K_RETURN, pygame.K_SPACE]:
                         difficulty, menu = ("NORMAL" if selected == 0 else "HARD"), False
+                        
+                        # 🎵 기존 음악을 확실히 끄고 새 음악 틀기
+                        pygame.mixer.music.stop() 
+                        
+                        try:
+                            if difficulty == "HARD":
+                                # 🚨 파일명이 다르면 아래 "hard.mp3"를 실제 파일명으로 꼭 바꿔주세요!
+                                pygame.mixer.music.load("hard.mp3") 
+                            else:
+                                pygame.mixer.music.load("normal.mp3")
+                            pygame.mixer.music.play(-1)
+                        except Exception as err:
+                            # 오류가 났다면 파이썬 터미널(검은 창)에 이유를 알려줍니다!
+                            print(f"🚨 배경음악 변경 실패 원인: {err}")
 
             clock.tick(FPS)
-
-        player = pygame.Rect(WIDTH // 2 - 20, HEIGHT - 70, 40, 40)
+            
+        # 🛠️ 커진 화면에 맞춘 플레이어 시작 위치
+        player = pygame.Rect(WIDTH // 2 - PLAYER_SIZE // 2, HEIGHT - PLAYER_SIZE - 30, PLAYER_SIZE, PLAYER_SIZE)
         bullets, enemy_bullets, enemies, explosions, items = [], [], [], [], []
         lives = 4 if difficulty == "NORMAL" else 3
         score, invincible, shoot_cd, current_lv_idx, last_event_score = 0, 0, 0, 0, 0
@@ -283,36 +340,67 @@ def main():
         boss, count_t, warn_timer, shake_timer = None, 180, 0, 0
         lvl_msg_timer, lvl_msg_text = 0, ""
 
+        frame_index = 0
+        frame_timer = 0
+
         running = True
         while running:
-            clock.tick(FPS)
+            dt = clock.tick(FPS)
             cfg = LEVELS[current_lv_idx]
+
+            frame_timer += dt
+            if frame_timer >= FRAME_DELAY:
+                frame_index = (frame_index + 1) % len(walk_frames)
+                frame_timer = 0
 
             spawn_rate = cfg["hard_spawn"] if difficulty == "HARD" else cfg["spawn"]
             spawn_count = cfg["hard_spawn_count"] if difficulty == "HARD" else 1
             boss_hp_value = cfg["boss_hp"] * 2 if difficulty == "HARD" else cfg["boss_hp"]
 
-            ox, oy = (random.randint(-8, 8), random.randint(-8, 8)) if shake_timer > 0 else (0, 0)
+            ox, oy = (random.randint(-12, 12), random.randint(-12, 12)) if shake_timer > 0 else (0, 0)
             if shake_timer > 0:
                 shake_timer -= 1
 
-            screen.fill(GRAY)
-            for s in stars:
-                s[1] = (s[1] + s[2]) % HEIGHT
-                pygame.draw.circle(screen, WHITE, (s[0] + ox, s[1] + oy), s[2])
+            # 🔴 올바른 배경 색칠
+            if difficulty == "HARD":
+                screen.fill((40, 10, 10))
+            else:
+                screen.fill(GRAY)
 
+            # ⭐ 별 그리기 (for문 시작)
+            for s in stars:
+                
+                # ── 💡 하드모드일 때 속도를 5배(s[2]*5)로 확실하게 증가! ──
+                if difficulty == "HARD":
+                    s[1] = (s[1] + (s[2] * 3.5)) % HEIGHT
+                else:
+                    s[1] = (s[1] + s[2]) % HEIGHT
+                # ──────────────────────────────────────────────────
+                    
+                if difficulty == "HARD":
+                    pygame.draw.circle(screen, (255, 80, 80), (s[0] + ox, s[1] + oy), s[2] + 2)
+                    pygame.draw.circle(screen, WHITE, (s[0] + ox, s[1] + oy), s[2])
+                else:
+                    pygame.draw.circle(screen, WHITE, (s[0] + ox, s[1] + oy), s[2])
+            # ⭐ 별 그리기 끝!
+            # 🚨 이벤트 루프 (들여쓰기가 별 그리기 for문 밖으로 완전히 나와야 합니다!)
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
+                if e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_ESCAPE:
+                        pygame.quit()
+                        sys.exit()
 
             if count_t > 0:
                 num = font_count.render(str(math.ceil(count_t / 60)), True, YELLOW)
-                screen.blit(num, (WIDTH // 2 - num.get_width() // 2 + ox, HEIGHT // 2 - 100 + oy))
+                screen.blit(num, (WIDTH // 2 - num.get_width() // 2 + ox, HEIGHT // 2 - 120 + oy))
                 count_t -= 1
             else:
+                # 여기서부터 플레이어 이동 및 총알 발사 로직 시작
                 keys = pygame.key.get_pressed()
-                ms = 8 if difficulty == "NORMAL" else 10
+                ms = 12 if difficulty == "NORMAL" else 15
 
                 if keys[pygame.K_LEFT] and player.left > 0:
                     player.x -= ms
@@ -325,45 +413,50 @@ def main():
 
                 shoot_cd -= 1
                 if keys[pygame.K_SPACE] and shoot_cd <= 0:
+                    # ── 스페이스바로 총알 발사 및 사운드 재생 ──
+                    if shoot_sound:
+                        shoot_sound.play()
+                        
+                    # 🛠️ 플레이어 총알 크기도 굵직하게 키웠습니다.
                     if power_timer > 0:
-                        bullets.append(pygame.Rect(player.centerx - 8, player.top - 10, 6, 14))
-                        bullets.append(pygame.Rect(player.centerx + 2, player.top - 10, 6, 14))
-                        bullets.append(pygame.Rect(player.left - 10, player.top, 6, 14))
-                        bullets.append(pygame.Rect(player.right + 4, player.top, 6, 14))
+                        bullets.append(pygame.Rect(player.centerx - 12, player.top - 15, 10, 24))
+                        bullets.append(pygame.Rect(player.centerx + 2, player.top - 15, 10, 24))
+                        bullets.append(pygame.Rect(player.left - 15, player.top, 10, 24))
+                        bullets.append(pygame.Rect(player.right + 5, player.top, 10, 24))
                     else:
-                        bullets.append(pygame.Rect(player.centerx - 3, player.top, 6, 14))
+                        bullets.append(pygame.Rect(player.centerx - 5, player.top, 10, 24))
                     shoot_cd = 10
 
                 if (score - last_event_score) >= cfg["need_score"] and not boss and warn_timer == 0:
                     warn_timer, enemies, enemy_bullets = 120, [], []
+                    
+                     # 🔊 보스 등장 경고음
+                    if warning_sound:
+                        warning_sound.play()
 
                 if warn_timer > 0:
                     warn_timer -= 1
                     if (warn_timer // 15) % 2 == 0:
                         tw = font_warning.render("WARNING!", True, RED)
-                        screen.blit(tw, (WIDTH // 2 - tw.get_width() // 2 + ox, HEIGHT // 2 - 60 + oy))
+                        screen.blit(tw, (WIDTH // 2 - tw.get_width() // 2 + ox, HEIGHT // 2 - 80 + oy))
 
-                    if warn_timer == 0:
+                if warn_timer == 0:
+                    if boss is None and (score - last_event_score) >= cfg["need_score"]:
+                        # 🛠️ 보스 사이즈 확대 (120x100 -> 180x150)
                         boss = {
-                            "rect": pygame.Rect(WIDTH // 2 - 60, 80, 120, 100),
-                            "hp": boss_hp_value,
-                            "max_hp": boss_hp_value,
-                            "dir_x": 1,
-                            "shoot_tick": 0,
-                            "phase_shoot_tick": 0,   # 페이즈 패턴 전용 쿨다운
-                            "phase_triggered": False, # 페이즈 진입 여부
-                            "target_pos": [WIDTH // 2 - 60, 80],
+                            "rect": pygame.Rect(WIDTH // 2 - 90, 80, 180, 150),
+                            "hp": boss_hp_value, "max_hp": boss_hp_value,
+                            "dir_x": 1, "shoot_tick": 0, "phase_shoot_tick": 0,
+                            "phase_triggered": False, "target_pos": [WIDTH // 2 - 90, 80],
                             "move_tick": 0,
                         }
 
                 if boss:
-                    # ── 하드모드 페이즈 트리거 체크 ──────────────────────
                     if difficulty == "HARD" and not boss['phase_triggered']:
                         ratio = boss['hp'] / boss['max_hp']
                         if ratio <= PHASE_HP_RATIO[current_lv_idx]:
                             boss['phase_triggered'] = True
                             shake_timer = 30
-                            # 페이즈 진입 알림 텍스트 (잠깐 표시)
                             lvl_msg_text = "PHASE 2!"
                             lvl_msg_timer = 90
 
@@ -371,20 +464,17 @@ def main():
                         boss['move_tick'] += 1
                         if boss['move_tick'] >= 300:
                             boss['move_tick'] = 0
-                            boss['target_pos'] = [random.randint(50, WIDTH - 170), random.randint(50, 250)]
-
+                            boss['target_pos'] = [random.randint(50, WIDTH - 230), random.randint(50, 300)]
                         boss['rect'].x += (boss['target_pos'][0] - boss['rect'].x) * 0.05
                         boss['rect'].y += (boss['target_pos'][1] - boss['rect'].y) * 0.05
                     else:
-                        boss['rect'].x += (4 + current_lv_idx * 2) * boss['dir_x']
+                        boss['rect'].x += (5 + current_lv_idx * 3) * boss['dir_x']
                         if boss['rect'].right >= WIDTH or boss['rect'].left <= 0:
                             boss['dir_x'] *= -1
 
                     draw_detailed_boss(screen, boss, current_lv_idx, ox, oy, (player.centerx, player.centery))
-
                     boss['shoot_tick'] += 1
 
-                    # 기본 공격 딜레이
                     if current_lv_idx == 2:
                         boss_attack_delay = 50
                     else:
@@ -392,81 +482,69 @@ def main():
 
                     if boss['shoot_tick'] > boss_attack_delay:
                         boss['shoot_tick'] = 0
-
                         if current_lv_idx == 0:
                             enemy_bullets.append({
-                                "rect": pygame.Rect(boss['rect'].centerx - 4, boss['rect'].bottom, 8, 20),
-                                "vx": 0, "vy": 6, "type": "bullet", "color": ORANGE
+                                "rect": pygame.Rect(boss['rect'].centerx - 6, boss['rect'].bottom, 12, 30),
+                                "vx": 0, "vy": 9, "type": "bullet", "color": ORANGE
                             })
-
                         elif current_lv_idx == 1:
                             if random.random() < 0.3:
                                 items.append({
-                                    "rect": pygame.Rect(boss['rect'].centerx - 10, boss['rect'].bottom, 20, 20),
-                                    "vx": 0, "vy": 3.5,
-                                    "type": random.choice(["heal", "shield"])
+                                    "rect": pygame.Rect(boss['rect'].centerx - 15, boss['rect'].bottom, 30, 30),
+                                    "vx": 0, "vy": 5, "type": random.choice(["heal", "shield"])
                                 })
                             else:
-                                for ang in [-2, 0, 2]:
+                                for ang in [-3, 0, 3]:
                                     enemy_bullets.append({
-                                        "rect": pygame.Rect(boss['rect'].centerx - 4, boss['rect'].bottom, 10, 10),
-                                        "vx": ang, "vy": 5, "type": "bullet", "color": YELLOW
+                                        "rect": pygame.Rect(boss['rect'].centerx - 7, boss['rect'].bottom, 15, 15),
+                                        "vx": ang, "vy": 7, "type": "bullet", "color": YELLOW
                                     })
-
                         elif current_lv_idx == 2:
                             dx, dy = player.centerx - boss['rect'].centerx, player.centery - boss['rect'].bottom
                             dist = math.hypot(dx, dy) or 1
                             enemy_bullets.append({
-                                "rect": pygame.Rect(boss['rect'].centerx - 5, boss['rect'].bottom, 10, 10),
-                                "vx": (dx / dist) * 8, "vy": (dy / dist) * 8,
+                                "rect": pygame.Rect(boss['rect'].centerx - 7, boss['rect'].bottom, 15, 15),
+                                "vx": (dx / dist) * 12, "vy": (dy / dist) * 12,
                                 "type": "bullet", "color": PURPLE
                             })
 
-                    # ── 하드모드 페이즈 2 추가 공격 패턴 ─────────────────
                     if difficulty == "HARD" and boss['phase_triggered']:
-                        # 보스별 페이즈 공격 쿨다운 (기본 공격보다 느리게)
                         phase_delays = [90, 80, 70]
                         boss['phase_shoot_tick'] += 1
                         if boss['phase_shoot_tick'] > phase_delays[current_lv_idx]:
                             boss['phase_shoot_tick'] = 0
                             fire_phase_attack(boss, current_lv_idx, player, enemy_bullets)
 
-                    # ── HP 바 ───────────────────────────────────────────
+                    # 🛠️ 보스 체력바 크기 확대
                     hp_color = (255, 80, 0) if boss.get('phase_triggered') else RED
-                    pygame.draw.rect(screen, (60, 0, 0), (WIDTH // 2 - 200 + ox, 55 + oy, 400, 15))
-                    pygame.draw.rect(screen, hp_color, (WIDTH // 2 - 200 + ox, 55 + oy, int(400 * (boss['hp'] / boss['max_hp'])), 15))
+                    pygame.draw.rect(screen, (60, 0, 0), (WIDTH // 2 - 300 + ox, 70 + oy, 600, 25))
+                    pygame.draw.rect(screen, hp_color, (WIDTH // 2 - 300 + ox, 70 + oy, int(600 * (boss['hp'] / boss['max_hp'])), 25))
                     bn = font_small.render(BOSS_NAMES[current_lv_idx], True, WHITE)
                     screen.blit(bn, (WIDTH // 2 - bn.get_width() // 2 + ox, 30 + oy))
 
-                    # 페이즈 진입 시 HP 바 아래에 "PHASE 2" 표시
                     if boss.get('phase_triggered'):
                         p2_lbl = font_small.render("◆ PHASE 2 ◆", True, (255, 140, 0))
-                        screen.blit(p2_lbl, (WIDTH // 2 - p2_lbl.get_width() // 2 + ox, 72 + oy))
+                        screen.blit(p2_lbl, (WIDTH // 2 - p2_lbl.get_width() // 2 + ox, 100 + oy))
 
                 elif warn_timer == 0:
                     if random.randint(1, spawn_rate) == 1:
                         for _ in range(spawn_count):
                             ecolor, hp, espd = cfg["enemy_color"], 1, cfg["speed"]
-
                             if current_lv_idx == 1:
                                 if random.random() < 0.6:
                                     hp = 3
                                 else:
                                     ecolor = RED
-                                    espd = 5
-
+                                    espd = 7.5
+                            # 🛠️ 일반 적 크기 확대 (36x36 -> 50x50)
                             enemies.append({
-                                "rect": pygame.Rect(random.randint(30, WIDTH - 60), -40, 36, 36),
-                                "hp": hp,
-                                "max_hp": hp,
-                                "color": ecolor,
-                                "speed": espd
+                                "rect": pygame.Rect(random.randint(50, WIDTH - 90), -60, 50, 50),
+                                "hp": hp, "max_hp": hp, "color": ecolor, "speed": espd
                             })
 
                 for it in items[:]:
-                    it['rect'].y += it.get('vy', 4)
+                    it['rect'].y += it.get('vy', 6)
                     draw_item_shape(screen, it['rect'].x + ox, it['rect'].y + oy, it['type'])
-
                     if player.colliderect(it['rect']):
                         if it['type'] == "heal":
                             lives = min(5, lives + 1)
@@ -474,10 +552,8 @@ def main():
                             shield_timer = MAX_SHIELD_TIME
                         elif it['type'] == "power":
                             power_timer = min(MAX_POWER_TIME, power_timer + 300)
-
                         score += 50
                         items.remove(it)
-
                     elif it['rect'].top > HEIGHT:
                         items.remove(it)
 
@@ -485,7 +561,6 @@ def main():
                     eb['rect'].x += eb['vx']
                     eb['rect'].y += eb['vy']
                     pygame.draw.ellipse(screen, eb.get("color", ORANGE), (eb['rect'].x + ox, eb['rect'].y + oy, eb['rect'].width, eb['rect'].height))
-
                     if player.colliderect(eb['rect']):
                         if invincible <= 0 and shield_timer <= 0:
                             lives -= 1
@@ -493,19 +568,18 @@ def main():
                             power_timer = 0
                             enemy_bullets.remove(eb)
                             if lives <= 0:
-                                show_ending_countdown("GAME OVER", f"SCORE: {score}", RED)
+                                # 🛠️ [수정됨] 호출 함수 변경
+                                show_ending_screen("GAME OVER", f"SCORE: {score}", RED)
                                 running = False
                         elif shield_timer > 0:
                             enemy_bullets.remove(eb)
-
                     elif eb['rect'].top > HEIGHT or eb['rect'].bottom < 0 or eb['rect'].right < 0 or eb['rect'].left > WIDTH:
                         enemy_bullets.remove(eb)
 
                 for b in bullets[:]:
-                    b.y -= 12
-                    pygame.draw.rect(screen, YELLOW if power_timer <= 0 else CYAN, (b.x + ox, b.y + oy, 6, 14))
+                    b.y -= 18 # 🛠️ 총알 속도 증가
+                    pygame.draw.rect(screen, YELLOW if power_timer <= 0 else CYAN, (b.x + ox, b.y + oy, b.width, b.height))
                     hit = False
-
                     for en in enemies[:]:
                         if b.colliderect(en['rect']):
                             en['hp'] -= 1
@@ -513,17 +587,13 @@ def main():
                                 for _ in range(5):
                                     explosions.append({
                                         "pos": [en['rect'].centerx, en['rect'].centery],
-                                        "r": random.randint(5, 15),
-                                        "life": 15,
-                                        "c": en['color']
+                                        "r": random.randint(7, 22), "life": 15, "c": en['color']
                                     })
-
                                 if en['color'] in [YELLOW, PURPLE] and random.random() < 0.65:
                                     items.append({
-                                        "rect": pygame.Rect(en['rect'].x, en['rect'].y, 20, 20),
+                                        "rect": pygame.Rect(en['rect'].x + 10, en['rect'].y + 10, 30, 30),
                                         "type": "power"
                                     })
-
                                 enemies.remove(en)
                                 score += 10
                             hit = True
@@ -533,20 +603,22 @@ def main():
                         boss['hp'] -= 1
                         hit = True
                         if boss['hp'] <= 0:
+                     
+                            #보스 폭발 효과음
+                            if explosion_sound:
+                                explosion_sound.play()
+                        
                             shake_timer = 60
                             for _ in range(40):
                                 explosions.append({
-                                    "pos": [boss['rect'].centerx + random.randint(-60, 60), boss['rect'].centery + random.randint(-40, 40)],
-                                    "r": random.randint(10, 50),
-                                    "life": 40,
-                                    "c": ORANGE
+                                    "pos": [boss['rect'].centerx + random.randint(-90, 90), boss['rect'].centery + random.randint(-60, 60)],
+                                    "r": random.randint(15, 75), "life": 40, "c": ORANGE
                                 })
-
                             score += 1000
                             enemy_bullets = []
-
                             if current_lv_idx == len(LEVELS) - 1:
-                                show_ending_countdown("MISSION CLEAR!", f"SCORE: {score}", GREEN)
+                                # 🛠️ [수정됨] 호출 함수 변경
+                                show_ending_screen("MISSION CLEAR!", f"SCORE: {score}", GREEN)
                                 running = False
                             else:
                                 current_lv_idx += 1
@@ -560,12 +632,11 @@ def main():
 
                 for en in enemies[:]:
                     en['rect'].y += en['speed']
-
                     if en['color'] == PURPLE:
                         if en['rect'].centerx < player.centerx:
-                            en['rect'].x += 3
+                            en['rect'].x += 4
                         elif en['rect'].centerx > player.centerx:
-                            en['rect'].x -= 3
+                            en['rect'].x -= 4
 
                     pygame.draw.polygon(
                         screen, en['color'],
@@ -577,8 +648,8 @@ def main():
                     )
 
                     if en['max_hp'] > 1:
-                        pygame.draw.rect(screen, RED, (en['rect'].x, en['rect'].y - 10, 36, 5))
-                        pygame.draw.rect(screen, GREEN, (en['rect'].x, en['rect'].y - 10, 36 * (en['hp'] / en['max_hp']), 5))
+                        pygame.draw.rect(screen, RED, (en['rect'].x, en['rect'].y - 12, 50, 6))
+                        pygame.draw.rect(screen, GREEN, (en['rect'].x, en['rect'].y - 12, 50 * (en['hp'] / en['max_hp']), 6))
 
                     if player.colliderect(en['rect']):
                         if invincible <= 0 and shield_timer <= 0:
@@ -587,16 +658,17 @@ def main():
                             power_timer = 0
                             enemies.remove(en)
                             if lives <= 0:
-                                show_ending_countdown("GAME OVER", f"SCORE: {score}", RED)
+                                # 🛠️ [수정됨] 호출 함수 변경
+                                show_ending_screen("GAME OVER", f"SCORE: {score}", RED)
                                 running = False
                         else:
                             enemies.remove(en)
-
                     elif en['rect'].top > HEIGHT:
                         enemies.remove(en)
 
             if shield_timer > 0:
-                pygame.draw.circle(screen, CYAN, (player.centerx + ox, player.centery + oy), 45, 2)
+                # 🛠️ 쉴드 원 크기도 커진 플레이어에 맞게 확대
+                pygame.draw.circle(screen, CYAN, (player.centerx + ox, player.centery + oy), 65, 3)
                 shield_timer -= 1
 
             p_color = BLUE
@@ -604,53 +676,40 @@ def main():
                 hue = (hue + 0.02) % 1.0
                 rgb = colorsys.hsv_to_rgb(hue, 1, 1)
                 p_color = (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
-                pygame.draw.rect(screen, GRAY, (WIDTH // 2 - 50, 60, 100, 5))
-                pygame.draw.rect(screen, p_color, (WIDTH // 2 - 50, 60, 100 * (power_timer / MAX_POWER_TIME), 5))
+                pygame.draw.rect(screen, GRAY, (WIDTH // 2 - 75, 80, 150, 8))
+                pygame.draw.rect(screen, p_color, (WIDTH // 2 - 75, 80, 150 * (power_timer / MAX_POWER_TIME), 8))
                 power_timer -= 1
 
             for ex in explosions[:]:
                 pygame.draw.circle(screen, ex['c'], (ex['pos'][0] + ox, ex['pos'][1] + oy), int(ex['r']))
                 ex['life'] -= 1
-                ex['r'] += 0.3
+                ex['r'] += 0.4
                 if ex['life'] <= 0:
                     explosions.remove(ex)
 
             if (invincible // 10) % 2 == 0:
-                draw_color = p_color if shield_timer <= 0 else CYAN
-                pygame.draw.polygon(screen, draw_color, [
-                    (player.centerx + ox, player.top + oy),
-                    (player.left + ox, player.bottom + oy),
-                    (player.right + ox, player.bottom + oy)
-                ])
-                if power_timer > 0:
-                    pygame.draw.polygon(screen, WHITE, [
-                        (player.centerx + ox, player.top + oy),
-                        (player.left + ox, player.bottom + oy),
-                        (player.right + ox, player.bottom + oy)
-                    ], 2)
-
+                screen.blit(walk_frames[frame_index], (player.x + ox, player.y + oy))
+                
             if invincible > 0:
                 invincible -= 1
 
             if lvl_msg_timer > 0:
                 ms = font_big.render(lvl_msg_text, True, YELLOW)
                 ms.set_alpha(min(255, lvl_msg_timer * 5))
-                screen.blit(ms, (WIDTH // 2 - ms.get_width() // 2 + ox, HEIGHT // 2 - 50 + oy))
+                screen.blit(ms, (WIDTH // 2 - ms.get_width() // 2 + ox, HEIGHT // 2 - 60 + oy))
                 lvl_msg_timer -= 1
 
-            screen.blit(font_small.render(f"SCORE: {score}", True, WHITE), (20, 20))
-            screen.blit(font_small.render(f"LIVES: {'♥' * lives}", True, RED), (WIDTH - 150, 20))
+            screen.blit(font_small.render(f"SCORE: {score}", True, WHITE), (30, 30))
+            screen.blit(font_small.render(f"LIVES: {'♥' * lives}", True, RED), (WIDTH - 220, 30))
 
             if not boss and warn_timer == 0:
-                pygame.draw.rect(screen, WHITE, (WIDTH // 2 - 100 + ox, 35 + oy, 200, 10), 1)
-                pygame.draw.rect(screen, BLUE, (WIDTH // 2 - 100 + ox, 35 + oy, 200 * min(1.0, (score - last_event_score) / cfg["need_score"]), 10))
+                pygame.draw.rect(screen, WHITE, (WIDTH // 2 - 150 + ox, 45 + oy, 300, 12), 1)
+                pygame.draw.rect(screen, BLUE, (WIDTH // 2 - 150 + ox, 45 + oy, 300 * min(1.0, (score - last_event_score) / cfg["need_score"]), 12))
                 lbl = font_small.render(cfg["label"], True, YELLOW)
                 screen.blit(lbl, (WIDTH // 2 - lbl.get_width() // 2 + ox, 10 + oy))
 
             pygame.display.flip()
 
-
 if __name__ == "__main__":
     main()
-
 
