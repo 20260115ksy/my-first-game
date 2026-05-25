@@ -1,0 +1,1080 @@
+import cv2
+import pygame
+import sys
+import os
+import re
+import math
+
+# ==========================================
+# 1. 초기 설정 & 해상도 기준 설정
+# ==========================================
+pygame.init()
+pygame.mixer.init() 
+
+BASE_WIDTH, BASE_HEIGHT = 1280, 720
+WIDTH, HEIGHT = BASE_WIDTH, BASE_HEIGHT
+scale_factor = 1.0
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+pygame.display.set_caption("Good Night Store - Fixed Edition")
+clock = pygame.time.Clock()
+
+running = True
+
+# 테마 색상 정의
+WHITE = (255, 255, 255)
+YELLOW = (240, 200, 80)      
+RED = (255, 100, 100)
+DARK_BG = (15, 15, 18)       
+DIALOG_BOX_COLOR = (24, 24, 28, 240) 
+
+# ==========================================
+# 2. 경로 설정
+# ==========================================
+PATH_VIDEO = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_MAIN.mp4"
+PATH_FONT = r"C:\Users\HOSEO\Desktop\project\assets\fonts\font\ttf\DOSIyagiBoldface.ttf"
+PATH_BGM = r"C:\Users\HOSEO\Desktop\project\assets\sounds\welc0me_MAIN_MUSIC.mp3"
+PATH_SFX = r"C:\Users\HOSEO\Desktop\project\assets\sounds\clilck_SOUND.mp3" 
+PATH_SELECT_SFX = r"C:\Users\HOSEO\Desktop\project\assets\sounds\lclick_SOUND.mp3" 
+PATH_BEEP_SFX = r"C:\Users\HOSEO\Desktop\project\assets\sounds\beep_SOUND.mp3"
+
+PATH_BELL_SFX = r"C:\Users\HOSEO\Desktop\project\assets\sounds\bell_SOUND.mp3" 
+PATH_CELULAR_SFX = r"C:\Users\HOSEO\Desktop\project\assets\sounds\celular_SOUND.mp3" 
+
+PATH_STORY_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP2.png" 
+PATH_INGAME_MAP = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
+PATH_LOOK_SHELF = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP3.png"
+PATH_HIDE_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP4.png"
+DIR_NPC = r"C:\Users\HOSEO\Desktop\project\entities\npc"
+
+# ==========================================
+# 3. 자원 로드 및 텍스트 헬퍼 함수
+# ==========================================
+def load_font(size, sf):
+    final_size = int(size * sf)
+    if os.path.exists(PATH_FONT):
+        return pygame.font.Font(PATH_FONT, final_size)
+    else:
+        return pygame.font.SysFont("malgungothic", final_size, bold=True)
+
+def draw_text_center(text, font, color, x, y):
+    text_surface = font.render(text, True, color)
+    text_rect = text_surface.get_rect(center=(x, y))
+    screen.blit(text_surface, text_rect)
+
+def load_img(filename):
+    path = os.path.join(DIR_NPC, filename)
+    if os.path.exists(path):
+        return pygame.image.load(path).convert_alpha()
+    return None
+
+def load_and_scale_player(filename, w, h):
+    if os.path.exists(filename):
+        img = pygame.image.load(filename).convert_alpha()
+        return pygame.transform.scale(img, (w, h))
+    fallback = pygame.Surface((w, h), pygame.SRCALPHA)
+    fallback.fill((200, 50, 50))
+    return fallback
+
+font_size = 45 
+menu_font = load_font(font_size, scale_factor)
+dialog_font = load_font(30, scale_factor) 
+name_font = load_font(34, scale_factor)   
+small_guide_font = load_font(22, scale_factor) 
+
+cap = cv2.VideoCapture(PATH_VIDEO)
+story_bg_image = pygame.image.load(PATH_STORY_BG).convert() if os.path.exists(PATH_STORY_BG) else None
+look_shelf_bg = pygame.image.load(PATH_LOOK_SHELF).convert() if os.path.exists(PATH_LOOK_SHELF) else None
+hide_bg_image = pygame.image.load(PATH_HIDE_BG).convert() if os.path.exists(PATH_HIDE_BG) else None
+ingame_bg_image = pygame.image.load(PATH_INGAME_MAP).convert() if os.path.exists(PATH_INGAME_MAP) else None
+
+# --- 여 아래 두 줄을 새로 추가해 주세요 ---
+PATH_COUNTER_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
+counter_bg_image = pygame.image.load(PATH_COUNTER_BG).convert() if os.path.exists(PATH_COUNTER_BG) else None
+PATH_COUNTER_OVERLAY = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
+
+bgm_volume = 0.5
+target_bgm_volume = bgm_volume 
+sfx_volume = 0.5
+
+if os.path.exists(PATH_BGM):
+    pygame.mixer.music.load(PATH_BGM)
+    pygame.mixer.music.set_volume(bgm_volume)
+    pygame.mixer.music.play(-1)
+
+click_sound = pygame.mixer.Sound(PATH_SFX) if os.path.exists(PATH_SFX) else None
+if click_sound: click_sound.set_volume(sfx_volume)
+
+select_sound = pygame.mixer.Sound(PATH_SELECT_SFX) if os.path.exists(PATH_SELECT_SFX) else None
+if select_sound: select_sound.set_volume(min(1.0, sfx_volume * 1.5))
+
+bell_sound = pygame.mixer.Sound(PATH_BELL_SFX) if os.path.exists(PATH_BELL_SFX) else None
+if bell_sound: bell_sound.set_volume(sfx_volume)
+
+celular_sound = pygame.mixer.Sound(PATH_CELULAR_SFX) if os.path.exists(PATH_CELULAR_SFX) else None
+if celular_sound: celular_sound.set_volume(sfx_volume)
+
+beep_sound = pygame.mixer.Sound(PATH_BEEP_SFX) if os.path.exists(PATH_BEEP_SFX) else None
+if beep_sound:
+    beep_sound.set_volume(sfx_volume)
+
+boss_images = {
+    "img1": load_img("사장_이미지1.png"), "img2": load_img("사장_이미지2.png"),
+    "img3": load_img("사장_이미지3.png"), "img4": load_img("사장_이미지4.png"),
+    "img5": load_img("사장_이미지5.png"), "img6": load_img("사장_이미지6.png"),
+    "img7": load_img("사장_이미지7.png")
+}
+
+player_rect = pygame.Rect(540, 300, 1, 1)
+player_speed = 0
+current_dir = "DOWN"
+walk_count = 0
+
+walls = [
+    pygame.Rect(240, 370, 220, 140),  
+    pygame.Rect(570, 370, 220, 140),  
+    pygame.Rect(240, 560, 220, 140),  
+    pygame.Rect(570, 560, 220, 140),  
+    pygame.Rect(420, 750, 390, 80),   
+    pygame.Rect(35,  240, 145, 400),  
+    pygame.Rect(850, 240, 240, 450),  
+]
+
+RAW_MAP_W, RAW_MAP_H = 1125, 900 
+RAW_PAPER_X, RAW_PAPER_Y, RAW_PAPER_W, RAW_PAPER_H = 825, 765, 30, 25 
+
+scaled_paper_rect = pygame.Rect(
+    int(RAW_PAPER_X * (WIDTH / RAW_MAP_W)),
+    int(RAW_PAPER_Y * (HEIGHT / RAW_MAP_H)),
+    int(RAW_PAPER_W * (WIDTH / RAW_MAP_W)),
+    int(RAW_PAPER_H * (HEIGHT / RAW_MAP_H))
+)
+
+counter_paper_rect = pygame.Rect(0, 0, 0, 0)
+previous_state = ""
+
+# ==========================================
+# 추가 인터랙션 상태
+# ==========================================
+show_paper_arrow = True        # 🌟 수칙서 종이 화살표 표시 여부 (추가)
+show_terminal_arrow = False
+show_call_popup = False
+show_action_popup = False
+
+# 클릭 인식을 위한 전역 선언용 빈 Rect들 생성
+show_action_arrow = False
+easy_action_rect = pygame.Rect(0, 0, 0, 0)
+
+hide_button = pygame.Rect(0, 0, 0, 0)
+shelf_button = pygame.Rect(0, 0, 0, 0)
+easy_terminal_rect = pygame.Rect(0, 0, 0, 0)
+easy_hide_rect = pygame.Rect(0, 0, 0, 0)
+easy_shelf_rect = pygame.Rect(0, 0, 0, 0)
+terminal_machine_rect = pygame.Rect(0, 0, 0, 0)
+back_rect = pygame.Rect(0, 0, 0, 0)
+
+# 🌟 사장 호출(단말기 튜토리얼) 대사 데이터 추가
+boss_call_script = [
+    ("시스템", "연결중 . . ."),
+    ("사장", "오, 깜빡하고 알려드리지 않았는데 잘 하시네요."),
+    ("사장", "혹시 '대처하기 어려운 일'이 생겼거나, 위험한 상황인 경우 이걸로 절 부르세요."),
+    ("사장", "하지만 저도 일이 있어서, 1번 정도밖에 도와줄 수 없을 것 같아요."),
+    ("사장", "행운을 빕니다.")
+]
+boss_call_index = 0
+boss_call_current_text = ""
+boss_call_char_index = 0
+
+# ==========================================
+# 주의사항 종이 이미지 (수정본)
+# ==========================================
+NOTICE_IMAGE_PATH = r"C:\Users\HOSEO\Desktop\project\world\map\주의사항.png"  # 실제 파일명으로 변경
+if os.path.exists(NOTICE_IMAGE_PATH):
+    original_notice = pygame.image.load(NOTICE_IMAGE_PATH).convert_alpha()
+    # 종이가 너무 크지 않게 세로 650 기준으로 가로 세로 비율 유지하여 축소
+    orig_w, orig_h = original_notice.get_size()
+    target_h = 750
+    target_w = int(orig_w * (target_h / orig_h))
+    notice_image = pygame.transform.smoothscale(original_notice, (target_w, target_h))
+    
+    # 이미지 크기에 맞게 히트박스(Rect) 자동 생성
+    notice_rect = notice_image.get_rect()
+else:
+    notice_image = None
+    notice_rect = pygame.Rect(0, 0, 500, 650) # 이미지 없을 때 기본 크기
+
+notice_x_button = pygame.Rect(0, 0, 50, 50)
+
+triangle_anim_timer = 0
+triangle_anim_speed = 0.2
+triangle_anim_amplitude = 5
+beep_timer = 0
+
+# ==========================================
+# 공용 화살표 그리기 함수
+# ==========================================
+def draw_interaction_arrow(center_x, center_y):
+    triangle_y_offset = int(
+        math.sin(triangle_anim_timer) *
+        triangle_anim_amplitude *
+        scale_factor
+    )
+
+    triangle_pos_y = center_y + triangle_y_offset
+
+    t_w = int(22 * scale_factor)
+    t_h = int(18 * scale_factor)
+
+    triangle_points = [
+        (center_x - t_w // 2, triangle_pos_y),
+        (center_x + t_w // 2, triangle_pos_y),
+        (center_x, triangle_pos_y + t_h)
+    ]
+
+    pygame.draw.polygon(screen, YELLOW, triangle_points)
+    pygame.draw.polygon(
+        screen,
+        WHITE,
+        triangle_points,
+        max(1, int(2 * scale_factor))
+    )
+
+def play_click_sound():
+    if click_sound: click_sound.play()
+def play_select_sound():
+    if select_sound: select_sound.play()
+
+# ==========================================
+# 4. 한글 키보드 매핑 데이터 테이블
+# ==========================================
+KEY_MAP = {
+    pygame.K_q: 'ㅂ', pygame.K_w: 'ㅈ', pygame.K_e: 'ㄷ', pygame.K_r: 'ㄱ', pygame.K_t: 'ㅅ',
+    pygame.K_y: 'ㅛ', pygame.K_u: 'ㅕ', pygame.K_i: 'ㅑ', pygame.K_o: 'ㅐ', pygame.K_p: 'ㅔ',
+    pygame.K_a: 'ㅁ', pygame.K_s: 'ㄴ', pygame.K_d: 'ㅇ', pygame.K_f: 'ㄹ', pygame.K_g: 'ㅎ',
+    pygame.K_h: 'ㅗ', pygame.K_j: 'ㅓ', pygame.K_k: 'ㅏ', pygame.K_l: 'ㅣ',
+    pygame.K_z: 'ㅋ', pygame.K_x: 'ㅌ', pygame.K_c: 'ㅊ', pygame.K_v: 'ㅍ', pygame.K_b: 'ㅠ',
+    pygame.K_n: 'ㅜ', pygame.K_m: 'ㅡ'
+}
+SHIFT_KEY_MAP = {
+    pygame.K_q: 'ㅃ', pygame.K_w: 'ㅉ', pygame.K_e: 'ㄸ', pygame.K_r: 'ㄲ', pygame.K_t: 'ㅆ',
+    pygame.K_o: 'ㅒ', pygame.K_p: 'ㅖ'
+}
+
+# ==========================================
+# 5. 한글 조합 시스템 엔진
+# ==========================================
+CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+JOUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
+JONGSUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+COMPLEX_VOWELS = {('ㅗ', 'ㅏ'): 'ㅘ', ('ㅗ', 'ㅐ'): 'ㅙ', ('ㅗ', 'ㅣ'): 'ㅚ', ('ㅜ', 'ㅓ'): 'ㅝ', ('ㅜ', 'ㅔ'): 'ㅞ', ('ㅜ', 'ㅣ'): 'ㅟ', ('ㅡ', 'ㅣ'): 'ㅢ'}
+COMPLEX_CONJS = {('ㄱ', 'ㅅ'): 'ㄳ', ('ㄴ', 'ㅈ'): 'ㄵ', ('ㄴ', 'ㅎ'): 'ㄶ', ('ㄹ', 'ㄱ'): 'ㄺ', ('ㄹ', 'ㅁ'): 'ㄻ', ('ㄹ', 'ㅂ'): 'ㄼ', ('ㄹ', 'ㅅ'): 'ㄽ', ('ㄹ', 'ㅌ'): 'ㄾ', ('ㄹ', 'ㅍ'): 'ㄿ', ('ㄹ', 'ㅎ'): 'ㅀ', ('ㅂ', 'ㅅ'): 'ㅄ'}
+
+class KoreanInputEngine:
+    def __init__(self):
+        self.history = []  
+    def add_code(self, char):
+        self.history.append(char)
+    def backspace(self):
+        if self.history: self.history.pop()
+    def get_text(self):
+        result = ""
+        state = 0 
+        cho, jung, jong = -1, -1, -1
+        last_v, last_j = "", ""
+        for c in self.history:
+            if c in CHOSUNG and state != 2:  
+                if state == 0: cho = CHOSUNG.index(c); state = 1
+                elif state == 1: result += CHOSUNG[cho]; cho = CHOSUNG.index(c)
+                elif state == 3: jong = JONGSUNG.index(c); last_j = c; state = 4
+                elif state == 4: 
+                    if (last_j, c) in COMPLEX_CONJS:
+                        combined = COMPLEX_CONJS[(last_j, c)]
+                        jong = JONGSUNG.index(combined); last_j = combined
+                    else: 
+                        result += chr(0xAC00 + cho * 588 + jung * 28 + jong)
+                        cho = CHOSUNG.index(c); jung, jong = -1, -1; state = 1
+            elif c in JOUNGSUNG: 
+                if state == 0: result += c
+                elif state == 1: jung = JOUNGSUNG.index(c); last_v = c; state = 3
+                elif state == 3: 
+                    if (last_v, c) in COMPLEX_VOWELS:
+                        combined = COMPLEX_VOWELS[(last_v, c)]
+                        jung = JOUNGSUNG.index(combined); last_v = combined
+                    else:
+                        result += chr(0xAC00 + cho * 588 + jung * 28); result += c
+                        state = 0; cho, jung = -1, -1
+                elif state == 4: 
+                    found_split = False
+                    for (j1, j2), comb in COMPLEX_CONJS.items():
+                        if JONGSUNG.index(comb) == jong:
+                            result += chr(0xAC00 + cho * 588 + jung * 28 + JONGSUNG.index(j1))
+                            cho = CHOSUNG.index(j2); jung = JOUNGSUNG.index(c); last_v = c; jong = -1; state = 3
+                            found_split = True; break
+                    if not found_split:
+                        single_j = JONGSUNG[jong]
+                        result += chr(0xAC00 + cho * 588 + jung * 28)
+                        cho = CHOSUNG.index(single_j); jung = JOUNGSUNG.index(c); last_v = c; jong = -1; state = 3
+            else: 
+                if state == 1: result += CHOSUNG[cho]
+                elif state == 3: result += chr(0xAC00 + cho * 588 + jung * 28)
+                elif state == 4: result += chr(0xAC00 + cho * 588 + jung * 28 + jong)
+                result += c; state = 0; cho, jung, jong = -1, -1, -1
+        
+        if state == 1: result += CHOSUNG[cho]
+        elif state == 3: result += chr(0xAC00 + cho * 588 + jung * 28)
+        elif state == 4: result += chr(0xAC00 + cho * 588 + jung * 28 + jong)
+        return result
+
+# ==========================================
+# 6. 욕설 필터 검사기
+# ==========================================
+BAD_WORDS = [
+    "씨발", "시발", "개새끼", "씹새끼", "좆같은", "랄지", "염병", "육시랄", "빌어먹을",
+    "느금마", "니기미", "애미", "애비", "엠창", "호로새끼", "병신", "등신", "호구", "찐따",
+    "대가리", "빡가", "쓰레기", "벌레", "충", "보지", "자지", "좆", "씹", "걸레", "꼴통",
+    "ㅆㅂ", "ㅅㅂ", "ㅂㅅ", "ㅈㄴ", "ㄴㄱㅁ", "ㄸㄹㅇ", "18", "십팔", "시8", 
+    "tlqkf", "qustls", "쒸발", "시벌", "찌발", "봉신"
+]
+
+def check_bad_word(name_to_check):
+    clean_name = re.sub(r'[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ]', '', name_to_check).lower()
+    for bad in BAD_WORDS:
+        if bad in clean_name: return True
+    return False
+
+# ==========================================
+# 7. 상태 및 스토리 데이터 관리
+# ==========================================
+state = "MENU" 
+menu_selection = 0
+opt_selection = 0
+fade_alpha = 0
+
+player_name = ""
+korean_input = KoreanInputEngine() 
+show_bad_word_warning = False      
+
+story_script = [
+    ("사장", "...아 새로 오신 알바분?", "img1"),                  
+    ("사장", "환영해요, 지원해 줘서 내가 얼마나 고마운지 몰라.", "img2"), 
+    ("사장", "보내준 자기소개서는 아주 잘 읽어봤어요. 경력도 화려하시고... 아, 그래도 우리 통성명은 해야 하니까 예의상 물어볼게요.", "img3"), 
+    ("사장", "이름이?", "img3"),                                 
+    ("사장", "음, 이름 멋지네! 다시 한번 만나서 반가워요.", "img3"), 
+    ("사장", "보다시피 여기가 완전 시골 구석탱이 인적 드문 곳이라... 요즘 젊은 친구들이 지원을 통 안 하더라고.", "img3"), 
+    ("사장", "신청서 넣은 사람은 당신이 딱 유일했어요.", "img3"), 
+    ("사장", "참, 오기 전에 모집 공고에 적어둔 '주의사항'은 다 읽고 왔죠?", "img4"), 
+    ("사장", "뭐, 워낙 베테랑이시니까 크게 걱정은 안 합니다만...", "img5"),  
+    ("사장", "그래도 혹시 모르잖아요?", "img5"),                   
+    ("사장", "무슨 일이 생길지.", "img5"),                        
+    (" ", " ", "img6"),                                          
+    ("사장", "하하! 농담이에요! 장난이 좀 심했나? 너무 진지하게 듣지 마요.", "img3"), 
+    ("사장", "급한 일이 있어서 이만 가볼게요. 매장 잘 부탁해요? 그럼...\n좋은 밤 되시길.", "img7") 
+]
+
+story_index = 0
+current_text = ""
+text_speed = 2  
+char_index = 0
+pause_timer = 0 
+celular_played = False 
+
+# ==========================================
+# 8. 메인 게임 루프
+# ==========================================
+while running:
+    # --- 타이핑 로직 ---
+    if state == "STORY" and story_index < len(story_script):
+        speaker, full_text, img_key = story_script[story_index]
+        if "{name}" in full_text: full_text = full_text.format(name=player_name)
+            
+        if "...아" in current_text and "새로" not in current_text and pause_timer < 45: pause_timer += 1
+        elif "그럼..." in current_text and "좋은" not in current_text and pause_timer < 45: pause_timer += 1
+        elif char_index < len(full_text):
+            char_index += text_speed
+            current_text = full_text[:int(char_index)]
+        else: current_text = full_text
+        
+    # 🌟 사장 호출 단말기 대사 타이핑 로직 수정 (들여쓰기 교정 완료)
+    elif state == "CALL_BOSS" and boss_call_index < len(boss_call_script):
+        b_speaker, b_full_text = boss_call_script[boss_call_index]
+
+        # 연결중... 연출
+        if "연결중" in b_full_text:
+            if boss_call_char_index < len(b_full_text):
+                boss_call_char_index += 0.7
+                boss_call_current_text = b_full_text[:int(boss_call_char_index)]
+
+                # 삐 소리 반복
+                beep_timer += 1
+                if beep_timer >= 12:
+                    if beep_sound:
+                        beep_sound.play()
+                    beep_timer = 0
+            else:
+                boss_call_current_text = b_full_text
+
+        # 이후 사장 대사는 즉시 출력
+        else:
+            boss_call_char_index = len(b_full_text)
+            boss_call_current_text = b_full_text
+
+    # --- 실시간 오디오 제어 ---
+    if state == "STORY":
+        if 9 <= story_index <= 11: target_bgm_volume = 0.0  
+        else: target_bgm_volume = bgm_volume  
+            
+        curr_vol = pygame.mixer.music.get_volume()
+        if curr_vol > target_bgm_volume: pygame.mixer.music.set_volume(max(target_bgm_volume, curr_vol - 0.008))
+        elif curr_vol < target_bgm_volume: pygame.mixer.music.set_volume(min(target_bgm_volume, curr_vol + 0.008))
+
+        if story_index == 11 and not celular_played:
+            if celular_sound: celular_sound.play()
+            celular_played = True
+        elif story_index != 11: celular_played = False 
+    else:
+        target_bgm_volume = bgm_volume
+
+    # --- 인게임 플레이 업데이트 로직 ---
+    if state in ["PLAY", "COUNTER_POV"]:
+        keys = pygame.key.get_pressed()
+        dx, dy = 0, 0
+        is_moving = False
+
+        if state == "PLAY":
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]: dx = -player_speed; current_dir = "LEFT"; is_moving = True
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx = player_speed; current_dir = "RIGHT"; is_moving = True
+            if keys[pygame.K_UP] or keys[pygame.K_w]: dy = -player_speed; current_dir = "UP"; is_moving = True
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]: dy = player_speed; current_dir = "DOWN"; is_moving = True
+
+            walk_count = (walk_count + 1) if is_moving else 0
+            player_rect.x += dx
+            for wall in walls:
+                if player_rect.colliderect(wall):
+                    if dx > 0: player_rect.right = wall.left
+                    if dx < 0: player_rect.left = wall.right
+            
+            player_rect.y += dy
+            for wall in walls:
+                if player_rect.colliderect(wall):
+                    if dy > 0: player_rect.bottom = wall.top
+                    if dy < 0: player_rect.top = wall.bottom
+
+            player_rect.x = max(0, min(player_rect.x, WIDTH - player_rect.width))
+            player_rect.y = max(0, min(player_rect.y, HEIGHT - player_rect.height))
+
+        triangle_anim_timer += triangle_anim_speed
+
+    # --- 이벤트 처리 ---
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+            
+        elif event.type == pygame.VIDEORESIZE:
+            WIDTH, HEIGHT = event.w, event.h
+            screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+            scale_factor = WIDTH / BASE_WIDTH
+            menu_font = load_font(font_size, scale_factor)
+            dialog_font = load_font(30, scale_factor)
+            name_font = load_font(34, scale_factor)
+            small_guide_font = load_font(22, scale_factor)
+            
+            if os.path.exists(PATH_STORY_BG):
+                story_bg_image = pygame.image.load(PATH_STORY_BG).convert()
+                story_bg_image = pygame.transform.smoothscale(story_bg_image, (WIDTH, HEIGHT))
+
+            scaled_paper_rect = pygame.Rect(
+                int(RAW_PAPER_X * (WIDTH / RAW_MAP_W)),
+                int(RAW_PAPER_Y * (HEIGHT / RAW_MAP_H)),
+                int(RAW_PAPER_W * (WIDTH / RAW_MAP_W)),
+                int(RAW_PAPER_H * (HEIGHT / RAW_MAP_H))
+            )
+
+        elif event.type == pygame.KEYDOWN:
+            if state == "NAME_INPUT":
+                show_bad_word_warning = False 
+                if event.key == pygame.K_BACKSPACE: korean_input.backspace()
+                elif event.key == pygame.K_RETURN:
+                    final_input_name = korean_input.get_text().strip()
+                    if final_input_name != "":
+                        if check_bad_word(final_input_name): show_bad_word_warning = True 
+                        else:
+                            player_name = final_input_name
+                            play_select_sound()
+                            state = "STORY"; story_index += 1; char_index = 0; current_text = ""
+                elif len(korean_input.get_text()) < 8:
+                    if event.key == pygame.K_SPACE: korean_input.add_code(' ')
+                    elif event.key in KEY_MAP:
+                        mods = pygame.key.get_mods()
+                        if mods & pygame.KMOD_SHIFT and event.key in SHIFT_KEY_MAP: korean_input.add_code(SHIFT_KEY_MAP[event.key])
+                        else: korean_input.add_code(KEY_MAP[event.key])
+
+            elif state == "MENU":
+                if event.key == pygame.K_UP: menu_selection = (menu_selection - 1) % 3; play_click_sound()
+                elif event.key == pygame.K_DOWN: menu_selection = (menu_selection + 1) % 3; play_click_sound()
+                elif event.key == pygame.K_SPACE:
+                    play_select_sound()
+                    if menu_selection == 0: pygame.mixer.music.stop(); state = "FADE_OUT"; fade_alpha = 0
+                    elif menu_selection == 1: state = "OPTIONS"
+                    elif menu_selection == 2: running = False
+            
+            elif state == "OPTIONS":
+                if event.key == pygame.K_UP: opt_selection = (opt_selection - 1) % 3; play_click_sound()
+                elif event.key == pygame.K_DOWN: opt_selection = (opt_selection + 1) % 3; play_click_sound()
+                if opt_selection == 0:
+                    if event.key == pygame.K_LEFT: bgm_volume = max(0, round(bgm_volume - 0.1, 1)); play_click_sound()
+                    if event.key == pygame.K_RIGHT: bgm_volume = min(1, round(bgm_volume + 0.1, 1)); play_click_sound()
+                elif opt_selection == 1:
+                    if event.key == pygame.K_LEFT: sfx_volume = max(0, round(sfx_volume - 0.1, 1)); play_click_sound()
+                    if event.key == pygame.K_RIGHT: sfx_volume = min(1, round(sfx_volume + 0.1, 1)); play_click_sound()
+                    for s in [click_sound, select_sound, bell_sound, celular_sound]: 
+                        if s: s.set_volume(sfx_volume if s != select_sound else min(1.0, sfx_volume * 1.5))
+                if event.key == pygame.K_SPACE and opt_selection == 2: play_select_sound(); state = "MENU"; opt_selection = 0
+
+            elif state == "STORY":
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]: 
+                    speaker, full_text, img_key = story_script[story_index]
+                    if "{name}" in full_text: full_text = full_text.format(name=player_name)
+                    if char_index < len(full_text): char_index = len(full_text); current_text = full_text
+                    else:
+                        play_click_sound()
+                        if story_index == 3: state = "NAME_INPUT"
+                        else:
+                            if story_index == 11 and celular_sound: celular_sound.stop()
+                            story_index += 1; char_index = 0; current_text = ""; pause_timer = 0
+                            if story_index >= len(story_script): 
+                                state = "COUNTER_POV" 
+                                show_terminal_arrow = True
+
+        # ====================================================================
+        # 🌟 마우스 클릭 상호작용 구역 정밀 수선 및 들여쓰기 교정 완료
+        # ====================================================================
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # 1. 수칙서 읽기 창 내부 닫기 처리
+            if state == "READING_RULES":
+                if notice_x_button.collidepoint(event.pos):
+                    play_click_sound()
+                    show_paper_arrow = False
+                    state = previous_state  # 기존에 보던 화면으로 온전히 백업 복귀
+                    
+            # 담배 진열대 -> 카운터 복귀
+            elif state == "SHELF_VIEW":
+                if back_rect.collidepoint(event.pos):
+                    play_select_sound()
+                    state = "COUNTER_POV"
+
+            # 숨기 -> 카운터 복귀
+            elif state == "HIDING":
+                if back_rect.collidepoint(event.pos):
+                    play_select_sound()
+                    state = "COUNTER_POV"
+
+            # 2. 1인칭 카운터 시점 화면 상호작용
+            elif state == "COUNTER_POV":
+                # [A] 사장 호출하기 팝업창 활성화 중일 때
+                if show_call_popup:
+                    popup_rect = pygame.Rect(WIDTH // 2 - 180, HEIGHT // 2 - 60, 360, 120)
+                    if popup_rect.collidepoint(event.pos):
+                        play_select_sound()
+                        show_call_popup = False
+                        state = "CALL_BOSS"
+                        if beep_sound:
+                            beep_sound.play()
+                        beep_timer = 0
+
+                # [B] 일반 화살표들 상호작용 처리
+                else:
+                    # 주의사항 종이 클릭
+                    if counter_paper_rect.collidepoint(event.pos):
+                        play_select_sound()
+                        previous_state = "COUNTER_POV"
+                        state = "READING_RULES"
+
+                    # 카드 단말기 화살표 클릭
+                    elif easy_terminal_rect.collidepoint(event.pos) or terminal_machine_rect.collidepoint(event.pos):
+                        play_select_sound()
+                        show_call_popup = True
+                        
+                    elif show_action_arrow and easy_action_rect.collidepoint(event.pos):
+                        play_select_sound()
+                        show_action_popup = True
+                        
+                        # 행동 선택 팝업 버튼 클릭
+                    elif show_action_popup:
+
+                        if hide_button.collidepoint(event.pos):
+                            play_select_sound()
+                            show_action_popup = False
+                            state = "HIDING"
+
+                        elif shelf_button.collidepoint(event.pos):
+                                play_select_sound()
+                                show_action_popup = False
+                                state = "SHELF_VIEW"
+                                
+                        else:
+                            play_click_sound()
+                            show_action_popup = False
+
+            # 3. 탑다운 인게임 플레이(MAP) 상태일 때
+            elif state == "PLAY":
+                # 주의사항 종이 상호작용
+                if scaled_paper_rect.collidepoint(event.pos):
+                    play_select_sound()
+                    previous_state = "PLAY"
+                    state = "READING_RULES" 
+
+                # 카드 단말기 화살표 클릭 판정
+                elif show_terminal_arrow and easy_terminal_rect.collidepoint(event.pos):
+                    play_select_sound()
+                    show_call_popup = True
+
+                # 숨기 클릭 판정
+                elif show_hide_arrow and easy_hide_rect.collidepoint(event.pos):
+                    play_select_sound()
+                    state = "HIDING"
+                    
+            # 4. 사장 호출 대화 상태일 때 (타이핑 스킵 및 대사 전환)
+            elif state == "CALL_BOSS":
+                b_speaker, b_full_text = boss_call_script[boss_call_index]
+                if boss_call_char_index < len(b_full_text):
+                    boss_call_char_index = len(b_full_text)
+                    boss_call_current_text = b_full_text
+                else:
+                    play_click_sound()
+                    boss_call_index += 1
+                    boss_call_char_index = 0
+                    boss_call_current_text = ""
+                    if boss_call_index >= len(boss_call_script):
+                        # 다시 카운터 화면으로 복귀
+                        state = "COUNTER_POV"
+                        # 카드 단말기 화살표 제거
+                        show_terminal_arrow = False
+                        show_action_arrow = True
+                        
+    # ==========================================
+    # 9. 완벽하게 격리된 상태별 화면 렌더링 (Drawing)
+    # ==========================================
+    screen.fill(DARK_BG)
+
+    # --- [상태 1] 메인 메뉴 화면 ---
+    if state == "MENU":
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: cap.set(cv2.CAP_PROP_POS_FRAMES, 0); ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); frame = cv2.resize(frame, (WIDTH, HEIGHT))
+                screen.blit(pygame.image.frombuffer(frame.tobytes(), (WIDTH, HEIGHT), "RGB"), (0, 0))
+        items = ["시작", "설정", "나가기"]
+        for i, item in enumerate(items):
+            draw_text_center(item, menu_font, YELLOW if i == menu_selection else WHITE, WIDTH // 2, int(HEIGHT * 0.65) + i * int(60 * scale_factor))
+
+    # --- [상태 2] 설정 화면 ---
+    elif state == "OPTIONS":
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: cap.set(cv2.CAP_PROP_POS_FRAMES, 0); ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); frame = cv2.resize(frame, (WIDTH, HEIGHT))
+                screen.blit(pygame.image.frombuffer(frame.tobytes(), (WIDTH, HEIGHT), "RGB"), (0, 0))
+
+        options_overlay = pygame.Surface((WIDTH, HEIGHT))
+        options_overlay.fill((0, 0, 0))
+        options_overlay.set_alpha(170) 
+        screen.blit(options_overlay, (0, 0))
+
+        opt_items = ["배경음악", "효과음", "뒤로가기"]
+        bar_width = int(250 * scale_factor)
+        bar_height = max(10, int(15 * scale_factor))
+        for i, item in enumerate(opt_items):
+            y_pos = int(HEIGHT * 0.4) + i * int(80 * scale_factor)
+            if item != "뒤로가기": 
+                text_surf = menu_font.render(item, True, YELLOW if i == opt_selection else WHITE)
+                text_rect = text_surf.get_rect(right=WIDTH // 2 - int(50 * scale_factor), centery=y_pos)
+                screen.blit(text_surf, text_rect)
+                
+                fill_ratio = bgm_volume if i == 0 else sfx_volume
+                pygame.draw.rect(screen, (80, 80, 80), (WIDTH // 2, y_pos - (bar_height // 2), bar_width, bar_height))
+                pygame.draw.rect(screen, YELLOW if i == opt_selection else WHITE, (WIDTH // 2, y_pos - (bar_height // 2), int(bar_width * fill_ratio), bar_height))
+                screen.blit(menu_font.render(f"{int(fill_ratio*100)}%", True, YELLOW if i == opt_selection else WHITE), (WIDTH // 2 + bar_width + int(20 * scale_factor), y_pos - int(18 * scale_factor)))
+            else: 
+                draw_text_center(item, menu_font, YELLOW if i == opt_selection else WHITE, WIDTH // 2, y_pos + int(30 * scale_factor))
+
+    # --- [상태 3] 스토리 대사창 & 이름 입력 창 ---
+    elif state in ["STORY", "NAME_INPUT"]:
+        if story_bg_image: screen.blit(pygame.transform.scale(story_bg_image, (WIDTH, HEIGHT)), (0, 0))
+        dialog_h, dialog_w = int(160 * scale_factor), int(1000 * scale_factor)
+        dialog_x, dialog_y = (WIDTH - dialog_w) // 2, HEIGHT - dialog_h - int(30 * scale_factor)
+
+        speaker, full_text, img_key = story_script[story_index]
+        current_boss_img = boss_images.get(img_key) if img_key else None
+        if current_boss_img:
+            img_rect = current_boss_img.get_rect(); aspect_ratio = img_rect.height / img_rect.width
+            boss_w = int(950 * scale_factor); boss_h = int(boss_w * aspect_ratio)
+            max_h = dialog_y + int(20 * scale_factor)
+            if boss_h > max_h: boss_h = max_h; boss_w = int(boss_h / aspect_ratio) 
+            scaled_boss = pygame.transform.scale(current_boss_img, (boss_w, boss_h))
+            screen.blit(scaled_boss, ((WIDTH - boss_w) // 2, dialog_y - boss_h + int(20 * scale_factor)))
+
+        dialog_surf = pygame.Surface((dialog_w, dialog_h), pygame.SRCALPHA); dialog_surf.fill(DIALOG_BOX_COLOR)
+        pygame.draw.rect(dialog_surf, WHITE, (0, 0, dialog_w, dialog_h), int(3 * scale_factor), border_radius=8)
+        screen.blit(dialog_surf, (dialog_x, dialog_y))
+
+        if state == "NAME_INPUT":
+            screen.blit(name_font.render("시스템", True, WHITE), (dialog_x + int(40 * scale_factor), dialog_y + int(15 * scale_factor)))
+            screen.blit(small_guide_font.render("이름을 입력하세요 (ENTER)", True, YELLOW), (dialog_x + int(40 * scale_factor), dialog_y + int(55 * scale_factor)))
+            blink = "_" if (pygame.time.get_ticks() // 400) % 2 == 0 else ""
+            screen.blit(dialog_font.render(f"> {korean_input.get_text()}{blink}", True, WHITE), (dialog_x + int(40 * scale_factor), dialog_y + int(102 * scale_factor)))
+            if show_bad_word_warning: screen.blit(dialog_font.render("그를 자극하지 마세요.", True, RED), (dialog_x + int(500 * scale_factor), dialog_y + int(102 * scale_factor)))
+        else:
+            screen.blit(name_font.render(speaker, True, YELLOW if "사장" in speaker else WHITE), (dialog_x + int(40 * scale_factor), dialog_y + int(15 * scale_factor)))
+            max_text_width = dialog_w - int(80 * scale_factor)
+            lines, raw_sections = [], current_text.split('\n')
+            for s in raw_sections:
+                curr_line = ""
+                for char in s:
+                    if dialog_font.size(curr_line + char)[0] < max_text_width: curr_line += char
+                    else: lines.append(curr_line); curr_line = char
+                if curr_line: lines.append(curr_line)
+
+            for idx, line in enumerate(lines):
+                y_offset = dialog_y + int(60 * scale_factor) + idx * int(45 * scale_factor)
+                x_offset = dialog_x + int(40 * scale_factor)
+                if "'주의사항'" in line:
+                    start_k = line.find("'주의사항'"); end_k = start_k + len("'주의사항'")
+                    screen.blit(dialog_font.render(line[0:start_k], True, WHITE), (x_offset, y_offset))
+                    x_offset += dialog_font.size(line[0:start_k])[0]
+                    screen.blit(dialog_font.render(line[start_k:end_k], True, RED), (x_offset, y_offset))
+                    x_offset += dialog_font.size(line[start_k:end_k])[0]
+                    screen.blit(dialog_font.render(line[end_k:], True, WHITE), (x_offset, y_offset))
+                else: screen.blit(dialog_font.render(line, True, WHITE), (x_offset, y_offset))
+
+    # --- [상태 3.5] 1인칭 카운터 화면 ---
+    elif state == "COUNTER_POV":
+        if counter_bg_image:
+            scaled_counter = pygame.transform.scale(counter_bg_image, (WIDTH, HEIGHT))
+            screen.blit(scaled_counter, (0, 0))
+
+        # ==========================================
+        # 🌟 상호작용 화살표들 일관된 UI 드로잉 및 히트박스 실시간 정렬
+        # ==========================================
+        
+        # [A] 주의사항 종이 화살표 및 구역 설정
+        counter_paper_rect = pygame.Rect(
+            int(WIDTH * 0.55),
+            int(HEIGHT * 0.8),
+            int(150 * scale_factor),
+            int(100 * scale_factor)
+        )
+        if show_paper_arrow:
+            draw_interaction_arrow(counter_paper_rect.centerx, counter_paper_rect.top - 25)
+
+        # [B] 카드 단말기 화살표 및 구역 설정 (올려주신 화면상의 왼쪽 위치 고정)
+        terminal_x = int(WIDTH * 0.40)
+        terminal_y = int(HEIGHT * 0.60)
+        
+        if show_terminal_arrow:
+            draw_interaction_arrow(terminal_x, terminal_y) 
+        
+        # 상호작용 클릭 처리를 위한 박스 갱신 (화살표 중심으로 상하좌우 60픽셀 여유)
+        easy_terminal_rect = pygame.Rect(
+            terminal_x - 60,
+            terminal_y - 60,
+            120,
+            120
+        )
+
+        # 카드 단말기 본체 클릭 범위
+        terminal_machine_rect = pygame.Rect(
+            int(WIDTH * 0.31),   # X 위치
+            int(HEIGHT * 0.52),  # Y 위치
+            int(180 * scale_factor),  # 가로 크기
+            int(170 * scale_factor)   # 세로 크기
+        )
+
+        # [C] 행동 선택 화살표
+        action_x = int(WIDTH * 0.50)
+        action_y = int(HEIGHT * 0.90)
+
+        if show_action_arrow:
+            draw_interaction_arrow(action_x, action_y)
+
+        easy_action_rect = pygame.Rect(
+            action_x - 90,
+            action_y - 90,
+            180,
+            180
+        )
+        
+                # ==========================================
+        # 행동 선택 팝업
+        # ==========================================
+        if show_action_popup:
+
+            popup_rect = pygame.Rect(
+                WIDTH//2 - 220,
+                HEIGHT//2 - 120,
+                440,
+                240
+            )
+
+            pygame.draw.rect(
+                screen,
+                (20,20,20),
+                popup_rect,
+                border_radius=12
+            )
+
+            pygame.draw.rect(
+                screen,
+                WHITE,
+                popup_rect,
+                3,
+                border_radius=12
+            )
+
+            # 숨기 버튼
+            hide_button = pygame.Rect(
+                popup_rect.x + 40,
+                popup_rect.y + 40,
+                360,
+                60
+            )
+
+            pygame.draw.rect(
+                screen,
+                (40,40,40),
+                hide_button,
+                border_radius=10
+            )
+
+            pygame.draw.rect(
+                screen,
+                WHITE,
+                hide_button,
+                2,
+                border_radius=10
+            )
+
+            draw_text_center(
+                "숨기",
+                dialog_font,
+                WHITE,
+                hide_button.centerx,
+                hide_button.centery
+            )
+
+            # 담배 진열대 버튼
+            shelf_button = pygame.Rect(
+                popup_rect.x + 40,
+                popup_rect.y + 130,
+                360,
+                60
+            )
+
+            pygame.draw.rect(
+                screen,
+                (40,40,40),
+                shelf_button,
+                border_radius=10
+            )
+
+            pygame.draw.rect(
+                screen,
+                WHITE,
+                shelf_button,
+                2,
+                border_radius=10
+            )
+
+            draw_text_center(
+                "담배 진열대 보기",
+                dialog_font,
+                WHITE,
+                shelf_button.centerx,
+                shelf_button.centery
+            )
+            
+        # [E] 사장 호출 팝업 UI 오버레이
+        if show_call_popup:
+            popup_rect = pygame.Rect(WIDTH // 2 - 180, HEIGHT // 2 - 60, 360, 120)
+            pygame.draw.rect(screen, (20, 20, 20), popup_rect, border_radius=12)
+            pygame.draw.rect(screen, WHITE, popup_rect, 3, border_radius=12)
+
+            popup_text = dialog_font.render("사장 호출하기", True, WHITE)
+            screen.blit(popup_text, (popup_rect.centerx - popup_text.get_width() // 2, popup_rect.centery - popup_text.get_height() // 2))
+
+    # --- 🌟 [상태 5] 수칙서 확인 창 ---
+    elif state == "READING_RULES":
+        if previous_state == "COUNTER_POV":
+            if counter_bg_image: 
+                screen.blit(pygame.transform.scale(story_bg_image, (WIDTH, HEIGHT)), (0, 0))
+        else:
+            if os.path.exists(PATH_INGAME_MAP):
+                ingame_bg_image = pygame.image.load(PATH_INGAME_MAP).convert() if os.path.exists(PATH_INGAME_MAP) else None
+                screen.blit(pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)), (0, 0))
+            if os.path.exists(PATH_COUNTER_OVERLAY):
+                counter_img = pygame.image.load(PATH_COUNTER_OVERLAY).convert_alpha()
+                screen.blit(pygame.transform.scale(counter_img, (int(390 * (WIDTH / BASE_WIDTH)), int(180 * (HEIGHT / BASE_HEIGHT)))), (int(420 * (WIDTH / BASE_WIDTH)), int(680 * (HEIGHT / BASE_HEIGHT))))
+
+        # 어두운 반투명 오버레이
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill((0,0,0))
+        overlay.set_alpha(160)
+        screen.blit(overlay, (0,0))
+
+        # 종이 이미지 및 닫기 버튼 배치
+        if notice_image:
+            notice_rect.center = (WIDTH // 2, HEIGHT // 2)
+            screen.blit(notice_image, notice_rect)
+
+            notice_x_button.width = int(50 * scale_factor)
+            notice_x_button.height = int(50 * scale_factor)
+            notice_x_button.topright = (notice_rect.right - int(20 * scale_factor), notice_rect.top + int(20 * scale_factor))
+        else:
+            notice_rect.center = (WIDTH // 2, HEIGHT // 2)
+            pygame.draw.rect(screen, WHITE, notice_rect)
+            draw_text_center("주의사항 이미지 없음", dialog_font, RED, notice_rect.centerx, notice_rect.centery)
+
+        # X 버튼 출력
+        pygame.draw.rect(screen, (180,50,50), notice_x_button)
+        pygame.draw.rect(screen, WHITE, notice_x_button, max(1, int(2 * scale_factor)))
+        draw_text_center("X", dialog_font, WHITE, notice_x_button.centerx, notice_x_button.centery)
+
+    # --- 🌟 [추가 상태] 사장 호출 대화 상자 (단말기 튜토리얼) ---
+    elif state == "CALL_BOSS":
+        if ingame_bg_image:
+            screen.blit(
+                pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)),
+                (0, 0)
+        )
+        if 'PATH_COUNTER_OVERLAY' in globals() and os.path.exists(PATH_COUNTER_OVERLAY):
+            counter_img = pygame.image.load(PATH_COUNTER_OVERLAY).convert_alpha()
+            screen.blit(pygame.transform.scale(counter_img, (int(390 * (WIDTH / BASE_WIDTH)), int(180 * (HEIGHT / BASE_HEIGHT)))), (int(420 * (WIDTH / BASE_WIDTH)), int(680 * (HEIGHT / BASE_HEIGHT))))
+
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(100)
+        screen.blit(overlay, (0, 0))
+
+        # 하단 대화창UI 상자 그리기
+        dialog_h, dialog_w = int(160 * scale_factor), int(1000 * scale_factor)
+        dialog_x, dialog_y = (WIDTH - dialog_w) // 2, HEIGHT - dialog_h - int(30 * scale_factor)
+
+        dialog_surf = pygame.Surface((dialog_w, dialog_h), pygame.SRCALPHA)
+        dialog_surf.fill(DIALOG_BOX_COLOR)
+        pygame.draw.rect(dialog_surf, WHITE, (0, 0, dialog_w, dialog_h), int(3 * scale_factor), border_radius=8)
+        screen.blit(dialog_surf, (dialog_x, dialog_y))
+
+        if boss_call_index < len(boss_call_script):
+            b_speaker, b_full_text = boss_call_script[boss_call_index]
+            
+            # 화자 이름 출력
+            screen.blit(name_font.render(b_speaker, True, YELLOW if "사장" in b_speaker else WHITE), (dialog_x + int(40 * scale_factor), dialog_y + int(15 * scale_factor)))
+            
+            # 자동 줄바꿈 및 '대처하기 어려운 일' 빨간색 하이라이트 시스템
+            max_text_width = dialog_w - int(80 * scale_factor)
+            lines, raw_sections = [], boss_call_current_text.split('\n')
+            for s in raw_sections:
+                curr_line = ""
+                for char in s:
+                    if dialog_font.size(curr_line + char)[0] < max_text_width: curr_line += char
+                    else: lines.append(curr_line); curr_line = char
+                if curr_line: lines.append(curr_line)
+
+            for idx, line in enumerate(lines):
+                y_offset = dialog_y + int(60 * scale_factor) + idx * int(45 * scale_factor)
+                x_offset = dialog_x + int(40 * scale_factor)
+                
+                if "'대처하기 어려운 일'" in line:
+                    start_k = line.find("'대처하기 어려운 일'")
+                    end_k = start_k + len("'대처하기 어려운 일'")
+                    screen.blit(dialog_font.render(line[0:start_k], True, WHITE), (x_offset, y_offset))
+                    x_offset += dialog_font.size(line[0:start_k])[0]
+                    screen.blit(dialog_font.render(line[start_k:end_k], True, RED), (x_offset, y_offset))
+                    x_offset += dialog_font.size(line[start_k:end_k])[0]
+                    screen.blit(dialog_font.render(line[end_k:], True, WHITE), (x_offset, y_offset))
+                else:
+                    screen.blit(dialog_font.render(line, True, WHITE), (x_offset, y_offset))
+
+    # --- 담배 진열대 화면 (독립 블록 격리 및 들여쓰기 수정) ---
+    elif state == "SHELF_VIEW":
+        shelf_path = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP3.png"
+        if os.path.exists(shelf_path):
+            shelf_img = pygame.image.load(shelf_path).convert()
+            shelf_img = pygame.transform.scale(shelf_img, (WIDTH, HEIGHT))
+            screen.blit(shelf_img, (0, 0))
+
+        back_rect = pygame.Rect(WIDTH//2 - 180, HEIGHT - 140, 360, 80)
+        pygame.draw.rect(screen, (20,20,20), back_rect, border_radius=12)
+        pygame.draw.rect(screen, WHITE, back_rect, 3, border_radius=12)
+
+        draw_text_center(
+            "카운터로 돌아가기",
+            dialog_font,
+            WHITE,
+            back_rect.centerx,
+            back_rect.centery
+        )
+
+    # --- 숨기 화면 (독립 블록 격리 및 들여쓰기 수정) ---
+    elif state == "HIDING":
+        hide_path = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP4.png"
+        if os.path.exists(hide_path):
+            hide_img = pygame.image.load(hide_path).convert()
+            hide_img = pygame.transform.scale(hide_img, (WIDTH, HEIGHT))
+            screen.blit(hide_img, (0, 0))
+
+        back_rect = pygame.Rect(WIDTH//2 - 180, HEIGHT - 140, 360, 80)
+        pygame.draw.rect(screen, (20,20,20), back_rect, border_radius=12)
+        pygame.draw.rect(screen, WHITE, back_rect, 3, border_radius=12)
+
+        draw_text_center(
+            "카운터로 돌아가기",
+            dialog_font,
+            WHITE,
+            back_rect.centerx,
+            back_rect.centery
+        )
+    
+    # --- [상태 6] 게임 시작 페이드 아웃 전환 ---
+    elif state == "FADE_OUT":
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: cap.set(cv2.CAP_PROP_POS_FRAMES, 0); ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); frame = cv2.resize(frame, (WIDTH, HEIGHT))
+                screen.blit(pygame.image.frombuffer(frame.tobytes(), (WIDTH, HEIGHT), "RGB"), (0, 0))
+
+        fade_surface = pygame.Surface((WIDTH, HEIGHT))
+        fade_surface.fill((0, 0, 0))
+        fade_surface.set_alpha(fade_alpha)
+        screen.blit(fade_surface, (0, 0))
+        
+        fade_alpha += 8 
+        if fade_alpha >= 255:
+            if bell_sound:
+                bell_channel = bell_sound.play()
+                while bell_channel and bell_channel.get_busy():
+                    for ev in pygame.event.get():
+                        if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
+                    clock.tick(30)
+            state = "STORY"
+            story_index = 0
+            char_index = 0
+            pause_timer = 0
+            if os.path.exists(PATH_BGM):
+                pygame.mixer.music.set_volume(0.0)
+                pygame.mixer.music.play(-1)
+
+    # 화면 업데이트
+    pygame.display.flip() 
+    clock.tick(60)
+
+# ==========================================
+# 10. 게임 종료 및 리소스 해제
+# ==========================================
+if cap.isOpened():
+    cap.release()
+pygame.mixer.quit()
+pygame.quit()
+sys.exit()
