@@ -16,7 +16,7 @@ WIDTH, HEIGHT = BASE_WIDTH, BASE_HEIGHT
 scale_factor = 1.0
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Good Night Store - Fixed Edition")
+pygame.display.set_caption("Good Night Store - Overlay Edition")
 clock = pygame.time.Clock()
 
 running = True
@@ -45,11 +45,26 @@ PATH_STORY_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STOR
 PATH_INGAME_MAP = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
 PATH_LOOK_SHELF = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP3.png"
 PATH_HIDE_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP4.png"
+PATH_PAPER_IMG = r"C:\Users\HOSEO\Desktop\project\world\map\paper2.png"
+PATH_CARD_IMG = r"C:\Users\HOSEO\Desktop\project\world\map\card.png"
 DIR_NPC = r"C:\Users\HOSEO\Desktop\project\entities\npc"
+PATH_NOTICE_RULES = r"C:\Users\HOSEO\Desktop\project\world\map\주의사항.png"
 
 # ==========================================
 # 3. 자원 로드 및 텍스트 헬퍼 함수
 # ==========================================
+paper_image = None
+if os.path.exists(PATH_PAPER_IMG):
+    paper_image = pygame.image.load(PATH_PAPER_IMG).convert_alpha()
+
+card_image = None
+if os.path.exists(PATH_CARD_IMG):
+    card_image = pygame.image.load(PATH_CARD_IMG).convert_alpha()
+    
+rules_image = None
+if os.path.exists(PATH_NOTICE_RULES):
+    rules_image = pygame.image.load(PATH_NOTICE_RULES).convert_alpha()
+    
 def load_font(size, sf):
     final_size = int(size * sf)
     if os.path.exists(PATH_FONT):
@@ -68,14 +83,6 @@ def load_img(filename):
         return pygame.image.load(path).convert_alpha()
     return None
 
-def load_and_scale_player(filename, w, h):
-    if os.path.exists(filename):
-        img = pygame.image.load(filename).convert_alpha()
-        return pygame.transform.scale(img, (w, h))
-    fallback = pygame.Surface((w, h), pygame.SRCALPHA)
-    fallback.fill((200, 50, 50))
-    return fallback
-
 font_size = 45 
 menu_font = load_font(font_size, scale_factor)
 dialog_font = load_font(30, scale_factor) 
@@ -88,7 +95,6 @@ look_shelf_bg = pygame.image.load(PATH_LOOK_SHELF).convert() if os.path.exists(P
 hide_bg_image = pygame.image.load(PATH_HIDE_BG).convert() if os.path.exists(PATH_HIDE_BG) else None
 ingame_bg_image = pygame.image.load(PATH_INGAME_MAP).convert() if os.path.exists(PATH_INGAME_MAP) else None
 
-# --- 여 아래 두 줄을 새로 추가해 주세요 ---
 PATH_COUNTER_BG = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
 counter_bg_image = pygame.image.load(PATH_COUNTER_BG).convert() if os.path.exists(PATH_COUNTER_BG) else None
 PATH_COUNTER_OVERLAY = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP.png"
@@ -115,8 +121,7 @@ celular_sound = pygame.mixer.Sound(PATH_CELULAR_SFX) if os.path.exists(PATH_CELU
 if celular_sound: celular_sound.set_volume(sfx_volume)
 
 beep_sound = pygame.mixer.Sound(PATH_BEEP_SFX) if os.path.exists(PATH_BEEP_SFX) else None
-if beep_sound:
-    beep_sound.set_volume(sfx_volume)
+if beep_sound: beep_sound.set_volume(sfx_volume)
 
 boss_images = {
     "img1": load_img("사장_이미지1.png"), "img2": load_img("사장_이미지2.png"),
@@ -154,17 +159,16 @@ counter_paper_rect = pygame.Rect(0, 0, 0, 0)
 previous_state = ""
 
 # ==========================================
-# 추가 인터랙션 상태
+# 인터랙션 팝업 및 규칙서 버튼 정의
 # ==========================================
-show_paper_arrow = True        # 🌟 수칙서 종이 화살표 표시 여부 (추가)
+show_paper_arrow = True        
 show_terminal_arrow = False
 show_call_popup = False
 show_action_popup = False
-
-# 클릭 인식을 위한 전역 선언용 빈 Rect들 생성
 show_action_arrow = False
-easy_action_rect = pygame.Rect(0, 0, 0, 0)
+show_hide_arrow = True
 
+easy_action_rect = pygame.Rect(0, 0, 0, 0)
 hide_button = pygame.Rect(0, 0, 0, 0)
 shelf_button = pygame.Rect(0, 0, 0, 0)
 easy_terminal_rect = pygame.Rect(0, 0, 0, 0)
@@ -172,8 +176,8 @@ easy_hide_rect = pygame.Rect(0, 0, 0, 0)
 easy_shelf_rect = pygame.Rect(0, 0, 0, 0)
 terminal_machine_rect = pygame.Rect(0, 0, 0, 0)
 back_rect = pygame.Rect(0, 0, 0, 0)
+rules_close_button = pygame.Rect(0, 0, 0, 0)
 
-# 🌟 사장 호출(단말기 튜토리얼) 대사 데이터 추가
 boss_call_script = [
     ("시스템", "연결중 . . ."),
     ("사장", "오, 깜빡하고 알려드리지 않았는데 잘 하시네요."),
@@ -185,43 +189,14 @@ boss_call_index = 0
 boss_call_current_text = ""
 boss_call_char_index = 0
 
-# ==========================================
-# 주의사항 종이 이미지 (수정본)
-# ==========================================
-NOTICE_IMAGE_PATH = r"C:\Users\HOSEO\Desktop\project\world\map\주의사항.png"  # 실제 파일명으로 변경
-if os.path.exists(NOTICE_IMAGE_PATH):
-    original_notice = pygame.image.load(NOTICE_IMAGE_PATH).convert_alpha()
-    # 종이가 너무 크지 않게 세로 650 기준으로 가로 세로 비율 유지하여 축소
-    orig_w, orig_h = original_notice.get_size()
-    target_h = 750
-    target_w = int(orig_w * (target_h / orig_h))
-    notice_image = pygame.transform.smoothscale(original_notice, (target_w, target_h))
-    
-    # 이미지 크기에 맞게 히트박스(Rect) 자동 생성
-    notice_rect = notice_image.get_rect()
-else:
-    notice_image = None
-    notice_rect = pygame.Rect(0, 0, 500, 650) # 이미지 없을 때 기본 크기
-
-notice_x_button = pygame.Rect(0, 0, 50, 50)
-
 triangle_anim_timer = 0
 triangle_anim_speed = 0.2
 triangle_anim_amplitude = 5
 beep_timer = 0
 
-# ==========================================
-# 공용 화살표 그리기 함수
-# ==========================================
 def draw_interaction_arrow(center_x, center_y):
-    triangle_y_offset = int(
-        math.sin(triangle_anim_timer) *
-        triangle_anim_amplitude *
-        scale_factor
-    )
-
+    triangle_y_offset = int(math.sin(triangle_anim_timer) * triangle_anim_amplitude * scale_factor)
     triangle_pos_y = center_y + triangle_y_offset
-
     t_w = int(22 * scale_factor)
     t_h = int(18 * scale_factor)
 
@@ -230,14 +205,8 @@ def draw_interaction_arrow(center_x, center_y):
         (center_x + t_w // 2, triangle_pos_y),
         (center_x, triangle_pos_y + t_h)
     ]
-
     pygame.draw.polygon(screen, YELLOW, triangle_points)
-    pygame.draw.polygon(
-        screen,
-        WHITE,
-        triangle_points,
-        max(1, int(2 * scale_factor))
-    )
+    pygame.draw.polygon(screen, WHITE, triangle_points, max(1, int(2 * scale_factor)))
 
 def play_click_sound():
     if click_sound: click_sound.play()
@@ -329,11 +298,11 @@ class KoreanInputEngine:
 # 6. 욕설 필터 검사기
 # ==========================================
 BAD_WORDS = [
-    "씨발", "시발", "개새끼", "씹새끼", "좆같은", "랄지", "염병", "육시랄", "빌어먹을",
-    "느금마", "니기미", "애미", "애비", "엠창", "호로새끼", "병신", "등신", "호구", "찐따",
-    "대가리", "빡가", "쓰레기", "벌레", "충", "보지", "자지", "좆", "씹", "걸레", "꼴통",
+    "씨발", "시발", "개새끼", "씹새끼", "랄지", "염병", "빌어먹을",
+    "샤갈", "애비", "엠창", "호로새끼", "병신", "등신", "호구", "찐따",
+    "대가리", "빡가", "쓰레기", "벌레", "충", "꼴통",
     "ㅆㅂ", "ㅅㅂ", "ㅂㅅ", "ㅈㄴ", "ㄴㄱㅁ", "ㄸㄹㅇ", "18", "십팔", "시8", 
-    "tlqkf", "qustls", "쒸발", "시벌", "찌발", "봉신"
+    "tlqkf", "qustls", "시벌", "찌발"
 ]
 
 def check_bad_word(name_to_check):
@@ -394,26 +363,20 @@ while running:
             current_text = full_text[:int(char_index)]
         else: current_text = full_text
         
-    # 🌟 사장 호출 단말기 대사 타이핑 로직 수정 (들여쓰기 교정 완료)
     elif state == "CALL_BOSS" and boss_call_index < len(boss_call_script):
         b_speaker, b_full_text = boss_call_script[boss_call_index]
 
-        # 연결중... 연출
         if "연결중" in b_full_text:
             if boss_call_char_index < len(b_full_text):
                 boss_call_char_index += 0.7
                 boss_call_current_text = b_full_text[:int(boss_call_char_index)]
 
-                # 삐 소리 반복
                 beep_timer += 1
                 if beep_timer >= 12:
-                    if beep_sound:
-                        beep_sound.play()
+                    if beep_sound: beep_sound.play()
                     beep_timer = 0
             else:
                 boss_call_current_text = b_full_text
-
-        # 이후 사장 대사는 즉시 출력
         else:
             boss_call_char_index = len(b_full_text)
             boss_call_current_text = b_full_text
@@ -545,95 +508,70 @@ while running:
                                 state = "COUNTER_POV" 
                                 show_terminal_arrow = True
 
-        # ====================================================================
-        # 🌟 마우스 클릭 상호작용 구역 정밀 수선 및 들여쓰기 교정 완료
-        # ====================================================================
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # 1. 수칙서 읽기 창 내부 닫기 처리
             if state == "READING_RULES":
-                if notice_x_button.collidepoint(event.pos):
+                if rules_close_button.collidepoint(event.pos):
                     play_click_sound()
                     show_paper_arrow = False
-                    state = previous_state  # 기존에 보던 화면으로 온전히 백업 복귀
+                    state = previous_state  
                     
-            # 담배 진열대 -> 카운터 복귀
             elif state == "SHELF_VIEW":
                 if back_rect.collidepoint(event.pos):
                     play_select_sound()
                     state = "COUNTER_POV"
 
-            # 숨기 -> 카운터 복귀
             elif state == "HIDING":
                 if back_rect.collidepoint(event.pos):
                     play_select_sound()
                     state = "COUNTER_POV"
 
-            # 2. 1인칭 카운터 시점 화면 상호작용
             elif state == "COUNTER_POV":
-                # [A] 사장 호출하기 팝업창 활성화 중일 때
                 if show_call_popup:
                     popup_rect = pygame.Rect(WIDTH // 2 - 180, HEIGHT // 2 - 60, 360, 120)
                     if popup_rect.collidepoint(event.pos):
                         play_select_sound()
                         show_call_popup = False
                         state = "CALL_BOSS"
-                        if beep_sound:
-                            beep_sound.play()
+                        if beep_sound: beep_sound.play()
                         beep_timer = 0
-
-                # [B] 일반 화살표들 상호작용 처리
+                    else:
+                        show_call_popup = False
+                elif show_action_popup:
+                    if hide_button.collidepoint(event.pos):
+                        play_select_sound()
+                        show_action_popup = False
+                        state = "HIDING"
+                    elif shelf_button.collidepoint(event.pos):
+                        play_select_sound()
+                        show_action_popup = False
+                        state = "SHELF_VIEW"
+                    else:
+                        play_click_sound()
+                        show_action_popup = False
                 else:
-                    # 주의사항 종이 클릭
                     if counter_paper_rect.collidepoint(event.pos):
                         play_select_sound()
                         previous_state = "COUNTER_POV"
                         state = "READING_RULES"
-
-                    # 카드 단말기 화살표 클릭
                     elif easy_terminal_rect.collidepoint(event.pos) or terminal_machine_rect.collidepoint(event.pos):
                         play_select_sound()
                         show_call_popup = True
-                        
                     elif show_action_arrow and easy_action_rect.collidepoint(event.pos):
                         play_select_sound()
                         show_action_popup = True
-                        
-                        # 행동 선택 팝업 버튼 클릭
-                    elif show_action_popup:
 
-                        if hide_button.collidepoint(event.pos):
-                            play_select_sound()
-                            show_action_popup = False
-                            state = "HIDING"
-
-                        elif shelf_button.collidepoint(event.pos):
-                                play_select_sound()
-                                show_action_popup = False
-                                state = "SHELF_VIEW"
-                                
-                        else:
-                            play_click_sound()
-                            show_action_popup = False
-
-            # 3. 탑다운 인게임 플레이(MAP) 상태일 때
             elif state == "PLAY":
-                # 주의사항 종이 상호작용
                 if scaled_paper_rect.collidepoint(event.pos):
                     play_select_sound()
                     previous_state = "PLAY"
                     state = "READING_RULES" 
-
-                # 카드 단말기 화살표 클릭 판정
                 elif show_terminal_arrow and easy_terminal_rect.collidepoint(event.pos):
                     play_select_sound()
                     show_call_popup = True
-
-                # 숨기 클릭 판정
                 elif show_hide_arrow and easy_hide_rect.collidepoint(event.pos):
                     play_select_sound()
                     state = "HIDING"
                     
-            # 4. 사장 호출 대화 상태일 때 (타이핑 스킵 및 대사 전환)
             elif state == "CALL_BOSS":
                 b_speaker, b_full_text = boss_call_script[boss_call_index]
                 if boss_call_char_index < len(b_full_text):
@@ -645,14 +583,12 @@ while running:
                     boss_call_char_index = 0
                     boss_call_current_text = ""
                     if boss_call_index >= len(boss_call_script):
-                        # 다시 카운터 화면으로 복귀
                         state = "COUNTER_POV"
-                        # 카드 단말기 화살표 제거
                         show_terminal_arrow = False
                         show_action_arrow = True
                         
     # ==========================================
-    # 9. 완벽하게 격리된 상태별 화면 렌더링 (Drawing)
+    # 9. 상태별 화면 렌더링 (Drawing)
     # ==========================================
     screen.fill(DARK_BG)
 
@@ -754,199 +690,132 @@ while running:
             scaled_counter = pygame.transform.scale(counter_bg_image, (WIDTH, HEIGHT))
             screen.blit(scaled_counter, (0, 0))
 
-        # ==========================================
-        # 🌟 상호작용 화살표들 일관된 UI 드로잉 및 히트박스 실시간 정렬
-        # ==========================================
-        
-        # [A] 주의사항 종이 화살표 및 구역 설정
-        counter_paper_rect = pygame.Rect(
-            int(WIDTH * 0.55),
-            int(HEIGHT * 0.8),
-            int(150 * scale_factor),
-            int(100 * scale_factor)
-        )
-        if show_paper_arrow:
-            draw_interaction_arrow(counter_paper_rect.centerx, counter_paper_rect.top - 25)
+        mouse_pos = pygame.mouse.get_pos()
+        thick = max(3, int(5 * scale_factor)) 
 
-        # [B] 카드 단말기 화살표 및 구역 설정 (올려주신 화면상의 왼쪽 위치 고정)
-        terminal_x = int(WIDTH * 0.40)
-        terminal_y = int(HEIGHT * 0.60)
-        
-        if show_terminal_arrow:
-            draw_interaction_arrow(terminal_x, terminal_y) 
-        
-        # 상호작용 클릭 처리를 위한 박스 갱신 (화살표 중심으로 상하좌우 60픽셀 여유)
-        easy_terminal_rect = pygame.Rect(
-            terminal_x - 60,
-            terminal_y - 60,
-            120,
-            120
-        )
+        paper_x_ratio, paper_y_ratio = 0.46, 0.64       
+        paper_w = int(385 * (WIDTH / BASE_WIDTH))  
+        paper_h = int(280 * (HEIGHT / BASE_HEIGHT))  
 
-        # 카드 단말기 본체 클릭 범위
-        terminal_machine_rect = pygame.Rect(
-            int(WIDTH * 0.31),   # X 위치
-            int(HEIGHT * 0.52),  # Y 위치
-            int(180 * scale_factor),  # 가로 크기
-            int(170 * scale_factor)   # 세로 크기
-        )
+        card_x_ratio, card_y_ratio = 0.33, 0.60         
+        card_w = int(202 * (WIDTH / BASE_WIDTH))    
+        card_h = int(302 * (HEIGHT / BASE_HEIGHT))   
 
-        # [C] 행동 선택 화살표
-        action_x = int(WIDTH * 0.50)
-        action_y = int(HEIGHT * 0.90)
+        counter_paper_rect = pygame.Rect(int(WIDTH * paper_x_ratio), int(HEIGHT * paper_y_ratio), paper_w, paper_h)
+        terminal_machine_rect = pygame.Rect(int(WIDTH * card_x_ratio), int(HEIGHT * card_y_ratio), card_w, card_h)
+        easy_terminal_rect = terminal_machine_rect.copy()
+
+        # 1. 영수증 종이 출력 및 아웃라인 효과
+        if paper_image:
+            scaled_paper_surf = pygame.transform.scale(paper_image, (counter_paper_rect.width, counter_paper_rect.height))
+            screen.blit(scaled_paper_surf, counter_paper_rect)
+
+            if counter_paper_rect.collidepoint(mouse_pos):
+                paper_mask = pygame.mask.from_surface(scaled_paper_surf)
+                p_outline = paper_mask.to_surface(setcolor=(255, 255, 255), unsetcolor=(0, 0, 0, 0))
+                p_outline.set_colorkey((0, 0, 0))
+                thick_diag = int(thick * 0.707)
+                smooth_directions = [
+                    (-thick, 0), (thick, 0), (0, -thick), (0, thick),
+                    (-thick_diag, -thick_diag), (-thick_diag, thick_diag),
+                    (thick_diag, -thick_diag), (thick_diag, thick_diag)
+                ]
+                for dx, dy in smooth_directions:
+                    screen.blit(p_outline, (counter_paper_rect.x + dx, counter_paper_rect.y + dy))
+                screen.blit(scaled_paper_surf, counter_paper_rect)
+
+        # 2. 카드 단말기 출력 및 아웃라인 효과
+        if card_image:
+            scaled_card_surf = pygame.transform.scale(card_image, (terminal_machine_rect.width, terminal_machine_rect.height))
+            screen.blit(scaled_card_surf, terminal_machine_rect)
+
+            if terminal_machine_rect.collidepoint(mouse_pos):
+                card_mask = pygame.mask.from_surface(scaled_card_surf)
+                t_outline = card_mask.to_surface(setcolor=(255, 255, 255), unsetcolor=(0, 0, 0, 0))
+                t_outline.set_colorkey((0, 0, 0))
+                thick_diag = int(thick * 0.707)
+                smooth_directions = [
+                    (-thick, 0), (thick, 0), (0, -thick), (0, thick),
+                    (-thick_diag, -thick_diag), (-thick_diag, thick_diag),
+                    (thick_diag, -thick_diag), (thick_diag, thick_diag)
+                ]
+                for dx, dy in smooth_directions:
+                    screen.blit(t_outline, (terminal_machine_rect.x + dx, terminal_machine_rect.y + dy))
+                screen.blit(scaled_card_surf, terminal_machine_rect)
+
+        # 3. 추가 인터랙션 화살표
+        action_x = int(WIDTH * 0.58)
+        action_y = int(HEIGHT * 0.63)
 
         if show_action_arrow:
             draw_interaction_arrow(action_x, action_y)
+        easy_action_rect = pygame.Rect(action_x - 90, action_y - 90, 180, 180)
 
-        easy_action_rect = pygame.Rect(
-            action_x - 90,
-            action_y - 90,
-            180,
-            180
-        )
-        
-                # ==========================================
-        # 행동 선택 팝업
-        # ==========================================
-        if show_action_popup:
-
-            popup_rect = pygame.Rect(
-                WIDTH//2 - 220,
-                HEIGHT//2 - 120,
-                440,
-                240
-            )
-
-            pygame.draw.rect(
-                screen,
-                (20,20,20),
-                popup_rect,
-                border_radius=12
-            )
-
-            pygame.draw.rect(
-                screen,
-                WHITE,
-                popup_rect,
-                3,
-                border_radius=12
-            )
-
-            # 숨기 버튼
-            hide_button = pygame.Rect(
-                popup_rect.x + 40,
-                popup_rect.y + 40,
-                360,
-                60
-            )
-
-            pygame.draw.rect(
-                screen,
-                (40,40,40),
-                hide_button,
-                border_radius=10
-            )
-
-            pygame.draw.rect(
-                screen,
-                WHITE,
-                hide_button,
-                2,
-                border_radius=10
-            )
-
-            draw_text_center(
-                "숨기",
-                dialog_font,
-                WHITE,
-                hide_button.centerx,
-                hide_button.centery
-            )
-
-            # 담배 진열대 버튼
-            shelf_button = pygame.Rect(
-                popup_rect.x + 40,
-                popup_rect.y + 130,
-                360,
-                60
-            )
-
-            pygame.draw.rect(
-                screen,
-                (40,40,40),
-                shelf_button,
-                border_radius=10
-            )
-
-            pygame.draw.rect(
-                screen,
-                WHITE,
-                shelf_button,
-                2,
-                border_radius=10
-            )
-
-            draw_text_center(
-                "담배 진열대 보기",
-                dialog_font,
-                WHITE,
-                shelf_button.centerx,
-                shelf_button.centery
-            )
-            
-        # [E] 사장 호출 팝업 UI 오버레이
+        # 팝업 오버레이
         if show_call_popup:
             popup_rect = pygame.Rect(WIDTH // 2 - 180, HEIGHT // 2 - 60, 360, 120)
             pygame.draw.rect(screen, (20, 20, 20), popup_rect, border_radius=12)
             pygame.draw.rect(screen, WHITE, popup_rect, 3, border_radius=12)
-
             popup_text = dialog_font.render("사장 호출하기", True, WHITE)
             screen.blit(popup_text, (popup_rect.centerx - popup_text.get_width() // 2, popup_rect.centery - popup_text.get_height() // 2))
 
-    # --- 🌟 [상태 5] 수칙서 확인 창 ---
+        if show_action_popup:
+            popup_center_x = action_x
+            popup_bottom_y = action_y - int(20 * scale_factor)
+
+            hide_button = pygame.Rect(popup_center_x - int(70 * scale_factor), popup_bottom_y - int(75 * scale_factor), int(140 * scale_factor), int(32 * scale_factor))
+            pygame.draw.rect(screen, (20, 20, 20), hide_button, border_radius=4)
+            pygame.draw.rect(screen, WHITE, hide_button, 1, border_radius=4)
+            draw_text_center("숨기", small_guide_font, WHITE, hide_button.centerx, hide_button.centery)
+
+            shelf_button = pygame.Rect(popup_center_x - int(100 * scale_factor), popup_bottom_y - int(38 * scale_factor), int(200 * scale_factor), int(32 * scale_factor))
+            pygame.draw.rect(screen, (20, 20, 20), shelf_button, border_radius=4)
+            pygame.draw.rect(screen, WHITE, shelf_button, 1, border_radius=4)
+            draw_text_center("담배 진열대 보기", small_guide_font, WHITE, shelf_button.centerx, shelf_button.centery)
+
+    # --- [상태 5] 수칙서 확인 창 (★배경 뭉개짐 해결 및 오버레이 개선 구역★) ---
     elif state == "READING_RULES":
-        if previous_state == "COUNTER_POV":
-            if counter_bg_image: 
-                screen.blit(pygame.transform.scale(story_bg_image, (WIDTH, HEIGHT)), (0, 0))
+        # 1단계: 원래 있었던 맵 배경(이전 상태가 1인칭 카운터면 카운터 배경, 인게임 필드면 인게임 배경)을 하단에 먼저 렌더링
+        if previous_state == "COUNTER_POV" and counter_bg_image:
+            screen.blit(pygame.transform.scale(counter_bg_image, (WIDTH, HEIGHT)), (0, 0))
+        elif previous_state == "PLAY" and ingame_bg_image:
+            screen.blit(pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)), (0, 0))
         else:
-            if os.path.exists(PATH_INGAME_MAP):
-                ingame_bg_image = pygame.image.load(PATH_INGAME_MAP).convert() if os.path.exists(PATH_INGAME_MAP) else None
-                screen.blit(pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)), (0, 0))
-            if os.path.exists(PATH_COUNTER_OVERLAY):
-                counter_img = pygame.image.load(PATH_COUNTER_OVERLAY).convert_alpha()
-                screen.blit(pygame.transform.scale(counter_img, (int(390 * (WIDTH / BASE_WIDTH)), int(180 * (HEIGHT / BASE_HEIGHT)))), (int(420 * (WIDTH / BASE_WIDTH)), int(680 * (HEIGHT / BASE_HEIGHT))))
+            screen.fill(DARK_BG)
 
-        # 어두운 반투명 오버레이
+        # 2단계: 배경 위에 반투명 어두운 장막 레이어 구성 (집중 효과)
         overlay = pygame.Surface((WIDTH, HEIGHT))
-        overlay.fill((0,0,0))
-        overlay.set_alpha(160)
-        screen.blit(overlay, (0,0))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        screen.blit(overlay, (0, 0))
 
-        # 종이 이미지 및 닫기 버튼 배치
-        if notice_image:
-            notice_rect.center = (WIDTH // 2, HEIGHT // 2)
-            screen.blit(notice_image, notice_rect)
+        # 3단계: '주의사항' 수칙서 이미지를 화면 정중앙에 고정 비율(세로 85% 크기)로 배치
+        if rules_image:
+            orig_w, orig_h = rules_image.get_size()
+            target_h = int(HEIGHT * 0.85)
+            target_w = int(orig_w * (target_h / orig_h))
+            
+            scaled_rules = pygame.transform.smoothscale(rules_image, (target_w, target_h))
+            rules_rect = scaled_rules.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            screen.blit(scaled_rules, rules_rect)
 
-            notice_x_button.width = int(50 * scale_factor)
-            notice_x_button.height = int(50 * scale_factor)
-            notice_x_button.topright = (notice_rect.right - int(20 * scale_factor), notice_rect.top + int(20 * scale_factor))
+            # 4단계: 수칙서 종이 우측 상단에 직관적인 창 닫기용 [X] 버튼 배치
+            btn_size = int(40 * scale_factor)
+            rules_close_button = pygame.Rect(rules_rect.right - btn_size - int(20 * scale_factor), rules_rect.top + int(20 * scale_factor), btn_size, btn_size)
+            
+            pygame.draw.rect(screen, (180, 50, 50), rules_close_button, border_radius=6)
+            pygame.draw.rect(screen, WHITE, rules_close_button, max(1, int(2 * scale_factor)), border_radius=6)
+            draw_text_center("X", dialog_font, WHITE, rules_close_button.centerx, rules_close_button.centery)
         else:
-            notice_rect.center = (WIDTH // 2, HEIGHT // 2)
-            pygame.draw.rect(screen, WHITE, notice_rect)
-            draw_text_center("주의사항 이미지 없음", dialog_font, RED, notice_rect.centerx, notice_rect.centery)
+            draw_text_center("주의사항 이미지(주의사항.png)를 찾을 수 없습니다.", dialog_font, RED, WIDTH // 2, HEIGHT // 2)
+            rules_close_button = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 50, 200, 50)
+            pygame.draw.rect(screen, (40, 40, 40), rules_close_button, border_radius=6)
+            draw_text_center("돌아가기", dialog_font, WHITE, rules_close_button.centerx, rules_close_button.centery)
 
-        # X 버튼 출력
-        pygame.draw.rect(screen, (180,50,50), notice_x_button)
-        pygame.draw.rect(screen, WHITE, notice_x_button, max(1, int(2 * scale_factor)))
-        draw_text_center("X", dialog_font, WHITE, notice_x_button.centerx, notice_x_button.centery)
-
-    # --- 🌟 [추가 상태] 사장 호출 대화 상자 (단말기 튜토리얼) ---
+    # --- [추가 상태] 사장 호출 대화 상자 ---
     elif state == "CALL_BOSS":
         if ingame_bg_image:
-            screen.blit(
-                pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)),
-                (0, 0)
-        )
+            screen.blit(pygame.transform.scale(ingame_bg_image, (WIDTH, HEIGHT)), (0, 0))
         if 'PATH_COUNTER_OVERLAY' in globals() and os.path.exists(PATH_COUNTER_OVERLAY):
             counter_img = pygame.image.load(PATH_COUNTER_OVERLAY).convert_alpha()
             screen.blit(pygame.transform.scale(counter_img, (int(390 * (WIDTH / BASE_WIDTH)), int(180 * (HEIGHT / BASE_HEIGHT)))), (int(420 * (WIDTH / BASE_WIDTH)), int(680 * (HEIGHT / BASE_HEIGHT))))
@@ -956,7 +825,6 @@ while running:
         overlay.set_alpha(100)
         screen.blit(overlay, (0, 0))
 
-        # 하단 대화창UI 상자 그리기
         dialog_h, dialog_w = int(160 * scale_factor), int(1000 * scale_factor)
         dialog_x, dialog_y = (WIDTH - dialog_w) // 2, HEIGHT - dialog_h - int(30 * scale_factor)
 
@@ -967,11 +835,8 @@ while running:
 
         if boss_call_index < len(boss_call_script):
             b_speaker, b_full_text = boss_call_script[boss_call_index]
-            
-            # 화자 이름 출력
             screen.blit(name_font.render(b_speaker, True, YELLOW if "사장" in b_speaker else WHITE), (dialog_x + int(40 * scale_factor), dialog_y + int(15 * scale_factor)))
             
-            # 자동 줄바꿈 및 '대처하기 어려운 일' 빨간색 하이라이트 시스템
             max_text_width = dialog_w - int(80 * scale_factor)
             lines, raw_sections = [], boss_call_current_text.split('\n')
             for s in raw_sections:
@@ -985,9 +850,9 @@ while running:
                 y_offset = dialog_y + int(60 * scale_factor) + idx * int(45 * scale_factor)
                 x_offset = dialog_x + int(40 * scale_factor)
                 
-                if "'대처하기 어려운 일'" in line:
-                    start_k = line.find("'대처하기 어려운 일'")
-                    end_k = start_k + len("'대처하기 어려운 일'")
+                if "대처하기 어려운 일" in line:
+                    start_k = line.find("대처하기 어려운 일")
+                    end_k = start_k + len("대처하기 어려운 일")
                     screen.blit(dialog_font.render(line[0:start_k], True, WHITE), (x_offset, y_offset))
                     x_offset += dialog_font.size(line[0:start_k])[0]
                     screen.blit(dialog_font.render(line[start_k:end_k], True, RED), (x_offset, y_offset))
@@ -996,45 +861,29 @@ while running:
                 else:
                     screen.blit(dialog_font.render(line, True, WHITE), (x_offset, y_offset))
 
-    # --- 담배 진열대 화면 (독립 블록 격리 및 들여쓰기 수정) ---
+    # --- 담배 진열대 화면 ---
     elif state == "SHELF_VIEW":
         shelf_path = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP3.png"
         if os.path.exists(shelf_path):
             shelf_img = pygame.image.load(shelf_path).convert()
-            shelf_img = pygame.transform.scale(shelf_img, (WIDTH, HEIGHT))
-            screen.blit(shelf_img, (0, 0))
+            screen.blit(pygame.transform.scale(shelf_img, (WIDTH, HEIGHT)), (0, 0))
 
         back_rect = pygame.Rect(WIDTH//2 - 180, HEIGHT - 140, 360, 80)
         pygame.draw.rect(screen, (20,20,20), back_rect, border_radius=12)
         pygame.draw.rect(screen, WHITE, back_rect, 3, border_radius=12)
+        draw_text_center("카운터로 돌아가기", dialog_font, WHITE, back_rect.centerx, back_rect.centery)
 
-        draw_text_center(
-            "카운터로 돌아가기",
-            dialog_font,
-            WHITE,
-            back_rect.centerx,
-            back_rect.centery
-        )
-
-    # --- 숨기 화면 (독립 블록 격리 및 들여쓰기 수정) ---
+    # --- 숨기 화면 ---
     elif state == "HIDING":
         hide_path = r"C:\Users\HOSEO\Desktop\project\world\map\good_night_store_STORY_MAP4.png"
         if os.path.exists(hide_path):
             hide_img = pygame.image.load(hide_path).convert()
-            hide_img = pygame.transform.scale(hide_img, (WIDTH, HEIGHT))
-            screen.blit(hide_img, (0, 0))
+            screen.blit(pygame.transform.scale(hide_img, (WIDTH, HEIGHT)), (0, 0))
 
         back_rect = pygame.Rect(WIDTH//2 - 180, HEIGHT - 140, 360, 80)
         pygame.draw.rect(screen, (20,20,20), back_rect, border_radius=12)
         pygame.draw.rect(screen, WHITE, back_rect, 3, border_radius=12)
-
-        draw_text_center(
-            "카운터로 돌아가기",
-            dialog_font,
-            WHITE,
-            back_rect.centerx,
-            back_rect.centery
-        )
+        draw_text_center("카운터로 돌아가기", dialog_font, WHITE, back_rect.centerx, back_rect.centery)
     
     # --- [상태 6] 게임 시작 페이드 아웃 전환 ---
     elif state == "FADE_OUT":
@@ -1066,13 +915,9 @@ while running:
                 pygame.mixer.music.set_volume(0.0)
                 pygame.mixer.music.play(-1)
 
-    # 화면 업데이트
     pygame.display.flip() 
     clock.tick(60)
 
-# ==========================================
-# 10. 게임 종료 및 리소스 해제
-# ==========================================
 if cap.isOpened():
     cap.release()
 pygame.mixer.quit()
